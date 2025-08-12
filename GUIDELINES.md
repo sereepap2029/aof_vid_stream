@@ -62,9 +62,11 @@ aof_vid_stream/
 - [x] Implement MVC architecture with Flask
 - [x] Create HTTP server with proper routing
 - [x] Build REST API endpoints
-- [ ] Implement video display component
-- [ ] Add camera selection controls
+- [x] Add About and Help pages with comprehensive documentation
+- [x] Implement video display component placeholder
+- [x] Add camera selection controls
 - [x] Style the interface with CSS
+- [x] Create complete navigation system
 
 **Implementation Details:**
 - Created complete MVC architecture in `src/webapp/`
@@ -79,6 +81,11 @@ aof_vid_stream/
 - Configured template and static file serving
 - Added CLI commands for testing and debugging
 - Implemented environment-based configuration (dev/prod/test)
+- **NEW**: Added comprehensive About page with project overview and status
+- **NEW**: Added detailed Help page with troubleshooting and API documentation
+- **NEW**: Enhanced navigation with About and Help links
+- **NEW**: Added CSS styles for documentation pages
+- **NEW**: Improved user experience with comprehensive help content
 
 #### Phase 3: Streaming Implementation
 - [ ] Set up video streaming server
@@ -143,6 +150,38 @@ aof_vid_stream/
 - `logs/` - Log files
 - IDE specific files (`.vscode/`, `.idea/`)
 - OS specific files (`.DS_Store`, `Thumbs.db`)
+
+### 12. User Experience Guidelines
+- **Navigation**: Provide clear navigation with all main sections accessible
+- **Documentation**: Include comprehensive help and about pages
+- **Error Messages**: Provide user-friendly error messages and troubleshooting guidance
+- **Responsive Design**: Ensure interface works on different screen sizes
+- **Accessibility**: Follow web accessibility standards where possible
+
+### 13. Current Known Issues and Resolutions
+- **OpenCV Warnings**: Camera detection may show "Camera index out of range" warnings - these are normal during device enumeration
+- **Resolution Detection**: Some cameras may show "No supported resolutions found" warning but still work with default settings
+- **Multiple Device Support**: System supports multiple cameras but current UI focuses on primary device
+
+### 14. Recent Improvements (August 2025)
+- ✅ Added comprehensive About page with project status and technology overview
+- ✅ Created detailed Help page with troubleshooting and API documentation
+- ✅ Enhanced navigation system with all main sections
+- ✅ Improved CSS styling for documentation pages
+- ✅ Added responsive design for help and about content
+- ✅ Documented common issues and their resolutions
+- ✅ **NEW**: Restructured API into modular components for better organization
+- ✅ **NEW**: Split large API controller into separate modules (cameras, streams, system)
+- ✅ **NEW**: Improved API maintainability and scalability
+- ✅ **NEW**: Enhanced API documentation with detailed endpoint information
+
+### 15. API Architecture Improvements
+- **Modular Design**: Split monolithic API controller into specialized modules
+- **Separation of Concerns**: Each API module handles specific functionality
+- **Better Organization**: Cameras, Streams, and System APIs are now separate
+- **Enhanced Maintainability**: Easier to add new features and fix issues
+- **Improved Testing**: Individual API modules can be tested independently
+- **Legacy Compatibility**: Old API endpoints redirect to new modular structure
 
 ## Getting Started
 1. Clone the repository

@@ -455,3 +455,224 @@ body {
         flex-direction: column;
     }
 }
+
+/* About and Help Page Styles */
+.page-header {
+    text-align: center;
+    margin-bottom: 3rem;
+    padding: 2rem 0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 8px;
+    margin-top: 2rem;
+}
+
+.page-header h1 {
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.page-header .lead {
+    font-size: 1.2rem;
+    opacity: 0.9;
+}
+
+.content-section {
+    background: white;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    margin-bottom: 2rem;
+}
+
+.content-section h2 {
+    color: #2c3e50;
+    border-bottom: 3px solid #3498db;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.content-section h3 {
+    color: #34495e;
+    margin: 1.5rem 0 1rem 0;
+}
+
+.feature-list {
+    list-style: none;
+    padding-left: 0;
+}
+
+.feature-list li {
+    padding: 0.5rem 0;
+    border-left: 4px solid #3498db;
+    padding-left: 1rem;
+    margin-bottom: 0.5rem;
+    background: #f8f9fa;
+}
+
+.tech-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin: 1.5rem 0;
+}
+
+.tech-item {
+    background: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 8px;
+    border-left: 4px solid #e74c3c;
+}
+
+.tech-item h4 {
+    color: #2c3e50;
+    margin-bottom: 1rem;
+}
+
+.tech-item ul {
+    list-style-type: disc;
+    padding-left: 1.5rem;
+}
+
+.status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin: 1.5rem 0;
+}
+
+.status-item {
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.status-item.completed {
+    background: #d4edda;
+    border-left: 4px solid #28a745;
+}
+
+.status-item.in-progress {
+    background: #fff3cd;
+    border-left: 4px solid #ffc107;
+}
+
+.status-item.planned {
+    background: #d1ecf1;
+    border-left: 4px solid #17a2b8;
+}
+
+.status-item h4 {
+    margin-bottom: 0.5rem;
+}
+
+.info-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+}
+
+.info-table td {
+    padding: 0.75rem;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.info-table td:first-child {
+    background: #f8f9fa;
+    width: 30%;
+}
+
+.help-list {
+    padding-left: 1.5rem;
+}
+
+.help-list li {
+    margin-bottom: 0.75rem;
+    line-height: 1.6;
+}
+
+.help-section {
+    background: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin: 1.5rem 0;
+}
+
+.api-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+    background: white;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.api-table th,
+.api-table td {
+    padding: 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.api-table th {
+    background: #2c3e50;
+    color: white;
+    font-weight: 600;
+}
+
+.api-table tr:hover {
+    background: #f8f9fa;
+}
+
+.troubleshooting .issue {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.troubleshooting .issue h4 {
+    color: #e74c3c;
+    margin-bottom: 1rem;
+}
+
+.troubleshooting .issue ul {
+    list-style-type: disc;
+    padding-left: 1.5rem;
+}
+
+.requirements ul {
+    list-style-type: disc;
+    padding-left: 1.5rem;
+}
+
+.requirements li {
+    margin-bottom: 0.5rem;
+}
+
+.support {
+    background: #e8f5e8;
+    padding: 1.5rem;
+    border-radius: 8px;
+    border-left: 4px solid #28a745;
+}
+
+@media (max-width: 768px) {
+    .tech-grid,
+    .status-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .page-header h1 {
+        font-size: 2rem;
+    }
+    
+    .content-section {
+        padding: 1rem;
+    }
+    
+    .api-table {
+        font-size: 0.9rem;
+    }
+}

@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}Help - AOF Video Stream{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Help & Documentation</h1>
+    <p class="lead">Get help with using AOF Video Stream</p>
+</div>
+
+<div class="content-section">
+    <h2>Getting Started</h2>
+    <ol class="help-list">
+        <li><strong>Check Camera Connection</strong> - Ensure your camera device is connected and recognized by the system</li>
+        <li><strong>Visit Camera Page</strong> - Go to the <a href="{{ url_for('main.camera') }}">Camera Interface</a> to control your camera</li>
+        <li><strong>Start Streaming</strong> - Use the camera controls to start video capture and streaming</li>
+        <li><strong>Monitor Status</strong> - Check the system status for camera and streaming information</li>
+    </ol>
+    
+    <h2>Camera Interface Guide</h2>
+    <div class="help-section">
+        <h3>Device Management</h3>
+        <ul>
+            <li><strong>Device Detection</strong> - The system automatically detects available camera devices</li>
+            <li><strong>Device Selection</strong> - Choose from available cameras if multiple devices are connected</li>
+            <li><strong>Device Status</strong> - Monitor camera connection and availability</li>
+        </ul>
+        
+        <h3>Video Controls</h3>
+        <ul>
+            <li><strong>Start/Stop Streaming</strong> - Control video capture and streaming</li>
+            <li><strong>Take Snapshot</strong> - Capture single frames from the video stream</li>
+            <li><strong>Quality Settings</strong> - Adjust resolution and frame rate settings</li>
+        </ul>
+    </div>
+    
+    <h2>API Documentation</h2>
+    <div class="api-section">
+        <h3>REST API Endpoints</h3>
+        <table class="api-table">
+            <thead>
+                <tr>
+                    <th>Method</th>
+                    <th>Endpoint</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>GET</td>
+                    <td>/api/cameras</td>
+                    <td>List all available camera devices</td>
+                </tr>
+                <tr>
+                    <td>POST</td>
+                    <td>/camera/start</td>
+                    <td>Start video streaming</td>
+                </tr>
+                <tr>
+                    <td>POST</td>
+                    <td>/camera/stop</td>
+                    <td>Stop video streaming</td>
+                </tr>
+                <tr>
+                    <td>GET</td>
+                    <td>/camera/stream</td>
+                    <td>Get video stream (multipart)</td>
+                </tr>
+                <tr>
+                    <td>GET</td>
+                    <td>/status</td>
+                    <td>Get system status information</td>
+                </tr>
+                <tr>
+                    <td>GET</td>
+                    <td>/config</td>
+                    <td>Get application configuration</td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <p>For complete API documentation, visit: <a href="{{ url_for('api.api_info') }}">/api</a></p>
+    </div>
+    
+    <h2>Troubleshooting</h2>
+    <div class="troubleshooting">
+        <h3>Common Issues</h3>
+        
+        <div class="issue">
+            <h4>Camera Not Detected</h4>
+            <ul>
+                <li>Check camera connection and power</li>
+                <li>Ensure camera drivers are installed</li>
+                <li>Try different USB ports</li>
+                <li>Check camera permissions in system settings</li>
+            </ul>
+        </div>
+        
+        <div class="issue">
+            <h4>Streaming Not Working</h4>
+            <ul>
+                <li>Verify camera is detected and available</li>
+                <li>Check browser compatibility and permissions</li>
+                <li>Try refreshing the page or restarting the application</li>
+                <li>Monitor console logs for error messages</li>
+            </ul>
+        </div>
+        
+        <div class="issue">
+            <h4>Performance Issues</h4>
+            <ul>
+                <li>Lower video resolution in camera settings</li>
+                <li>Reduce frame rate for better performance</li>
+                <li>Close other applications using the camera</li>
+                <li>Check system resources (CPU, memory)</li>
+            </ul>
+        </div>
+        
+        <div class="issue">
+            <h4>OpenCV Warnings</h4>
+            <ul>
+                <li>"Camera index out of range" warnings are normal during device detection</li>
+                <li>"No supported resolutions found" indicates camera capability detection issues</li>
+                <li>These warnings don't affect functionality when cameras are working</li>
+            </ul>
+        </div>
+    </div>
+    
+    <h2>Technical Requirements</h2>
+    <div class="requirements">
+        <h3>System Requirements</h3>
+        <ul>
+            <li><strong>Operating System</strong> - Windows, macOS, or Linux</li>
+            <li><strong>Python</strong> - Version 3.7 or higher</li>
+            <li><strong>Camera</strong> - USB camera or built-in webcam</li>
+            <li><strong>Browser</strong> - Modern web browser with HTML5 support</li>
+        </ul>
+        
+        <h3>Dependencies</h3>
+        <ul>
+            <li>Flask - Web framework</li>
+            <li>OpenCV (cv2) - Computer vision library</li>
+            <li>NumPy - Numerical computing</li>
+            <li>Pillow - Image processing</li>
+        </ul>
+    </div>
+    
+    <h2>Support & Contact</h2>
+    <div class="support">
+        <p>For additional support or questions:</p>
+        <ul>
+            <li>Check the project documentation in the repository</li>
+            <li>Review system logs for detailed error information</li>
+            <li>Test with different camera devices if available</li>
+            <li>Verify all dependencies are properly installed</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}

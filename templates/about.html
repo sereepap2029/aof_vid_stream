@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}About - AOF Video Stream{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>About AOF Video Stream</h1>
+    <p class="lead">A professional video streaming application built with Flask and OpenCV</p>
+</div>
+
+<div class="content-section">
+    <h2>Project Overview</h2>
+    <p>
+        AOF Video Stream is a comprehensive web application designed to capture video from camera devices 
+        and stream it through a web interface. Built with modern web technologies and computer vision 
+        capabilities, it provides a robust foundation for video streaming applications.
+    </p>
+    
+    <h3>Key Features</h3>
+    <ul class="feature-list">
+        <li><strong>Camera Device Detection</strong> - Automatically detects and manages multiple camera devices</li>
+        <li><strong>Real-time Video Capture</strong> - High-quality video capture with configurable settings</li>
+        <li><strong>Web Interface</strong> - Modern, responsive web interface for camera control</li>
+        <li><strong>REST API</strong> - Comprehensive API for programmatic access</li>
+        <li><strong>MVC Architecture</strong> - Clean, maintainable code structure</li>
+        <li><strong>Error Handling</strong> - Robust error handling and user feedback</li>
+    </ul>
+    
+    <h3>Technology Stack</h3>
+    <div class="tech-grid">
+        <div class="tech-item">
+            <h4>Backend</h4>
+            <ul>
+                <li>Python 3.x</li>
+                <li>Flask Web Framework</li>
+                <li>OpenCV (cv2)</li>
+                <li>Threading for async operations</li>
+            </ul>
+        </div>
+        <div class="tech-item">
+            <h4>Frontend</h4>
+            <ul>
+                <li>HTML5</li>
+                <li>CSS3 with responsive design</li>
+                <li>JavaScript (ES6+)</li>
+                <li>Jinja2 templating</li>
+            </ul>
+        </div>
+    </div>
+    
+    <h3>Project Status</h3>
+    <div class="status-grid">
+        <div class="status-item completed">
+            <h4>✅ Phase 1: Camera Integration</h4>
+            <p>Camera device detection, video capture, and hardware management - COMPLETED</p>
+        </div>
+        <div class="status-item completed">
+            <h4>✅ Phase 2: Web Interface</h4>
+            <p>MVC architecture, REST API, and web interface - COMPLETED</p>
+        </div>
+        <div class="status-item in-progress">
+            <h4>🚧 Phase 3: Streaming Implementation</h4>
+            <p>Real-time video streaming with WebSocket communication - IN PROGRESS</p>
+        </div>
+        <div class="status-item planned">
+            <h4>📋 Phase 4: Enhancement</h4>
+            <p>Recording capabilities, advanced controls, and optimization - PLANNED</p>
+        </div>
+    </div>
+    
+    <h3>Version Information</h3>
+    <table class="info-table">
+        <tr>
+            <td><strong>Version:</strong></td>
+            <td>2.0.0 (Phase 2 Complete)</td>
+        </tr>
+        <tr>
+            <td><strong>Release Date:</strong></td>
+            <td>August 2025</td>
+        </tr>
+        <tr>
+            <td><strong>License:</strong></td>
+            <td>AOF Video Stream Project</td>
+        </tr>
+        <tr>
+            <td><strong>Repository:</strong></td>
+            <td>aof_vid_stream</td>
+        </tr>
+    </table>
+</div>
+{% endblock %}

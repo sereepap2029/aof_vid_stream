@@ -7,7 +7,7 @@ This package contains request handlers and routing logic for the application.
 from flask import Flask
 from .main_controller import main_bp
 from .camera_controller import camera_bp
-from .api_controller import api_bp
+from .api import register_api_blueprints
 
 def register_blueprints(app: Flask) -> None:
     """
@@ -23,5 +23,5 @@ def register_blueprints(app: Flask) -> None:
     # Register camera routes
     app.register_blueprint(camera_bp, url_prefix='/camera')
     
-    # Register API routes
-    app.register_blueprint(api_bp, url_prefix='/api')
+    # Register modular API routes
+    register_api_blueprints(app)
