@@ -1,0 +1,14 @@
+# Core dependencies for AOF Video Stream
+opencv-python==4.8.1.78
+numpy==1.24.3
+flask==2.3.3
+flask-socketio==5.3.6
+python-socketio==5.9.0
+
+# Development dependencies
+pytest==7.4.2
+pytest-cov==4.1.0
+
+# Optional dependencies for enhanced functionality
+pillow==10.0.1
+python-dotenv==1.0.0
