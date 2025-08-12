@@ -73,35 +73,44 @@ function refreshCameraDevices() {
         refreshBtn.textContent = '🔄 Detecting...';
     }
     
-    // Simulate device detection (will be replaced with actual API call)
-    setTimeout(() => {
-        // Clear existing options
-        if (cameraSelect) {
-            cameraSelect.innerHTML = '<option value="">Select Camera...</option>';
-            
-            // Add mock camera devices (will be replaced with real data)
-            const mockDevices = [
-                { id: 0, name: 'Built-in Camera' },
-                { id: 1, name: 'USB Camera' }
-            ];
-            
-            mockDevices.forEach(device => {
-                const option = document.createElement('option');
-                option.value = device.id;
-                option.textContent = `Camera ${device.id}: ${device.name}`;
-                cameraSelect.appendChild(option);
-            });
-        }
-        
-        if (refreshBtn) {
-            refreshBtn.disabled = false;
-            refreshBtn.textContent = '🔄 Refresh Devices';
-        }
-        
-        if (window.AOFVideoStream) {
-            window.AOFVideoStream.showNotification('Camera devices refreshed', 'success');
-        }
-    }, 2000);
+    // Call real API to get camera devices
+    fetch('/api/cameras/?refresh=true')
+        .then(response => response.json())
+        .then(data => {
+            // Clear existing options
+            if (cameraSelect) {
+                cameraSelect.innerHTML = '<option value="">Select Camera...</option>';
+                
+                if (data.success && data.data.cameras) {
+                    data.data.cameras.forEach(device => {
+                        const option = document.createElement('option');
+                        option.value = device.index;
+                        option.textContent = `Camera ${device.index}: ${device.name}`;
+                        cameraSelect.appendChild(option);
+                    });
+                    
+                    if (window.AOFVideoStream) {
+                        window.AOFVideoStream.showNotification(`Found ${data.data.count} camera(s)`, 'success');
+                    }
+                } else {
+                    if (window.AOFVideoStream) {
+                        window.AOFVideoStream.showNotification('No cameras found', 'warning');
+                    }
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching camera devices:', error);
+            if (window.AOFVideoStream) {
+                window.AOFVideoStream.showNotification('Error detecting cameras', 'error');
+            }
+        })
+        .finally(() => {
+            if (refreshBtn) {
+                refreshBtn.disabled = false;
+                refreshBtn.textContent = '🔄 Refresh Devices';
+            }
+        });
 }
 
 function onCameraSelectionChange() {
@@ -125,6 +134,8 @@ function startStream() {
     const stopBtn = document.getElementById('stop-btn');
     const snapshotBtn = document.getElementById('snapshot-btn');
     const fullscreenBtn = document.getElementById('fullscreen-btn');
+    const resolutionSelect = document.getElementById('resolution-select');
+    const fpsSelect = document.getElementById('fps-select');
     
     if (!cameraSelect || !cameraSelect.value) {
         if (window.AOFVideoStream) {
@@ -134,37 +145,78 @@ function startStream() {
     }
     
     currentCamera = cameraSelect.value;
-    streamActive = true;
+    console.log(`Selected camera: ${currentCamera}`);
+    // Get selected resolution and FPS
+    let resolution = resolutionSelect ? resolutionSelect.value : '640x480';
+    let fps = fpsSelect ? parseInt(fpsSelect.value) : 30;
     
-    // Update UI
+    // Parse resolution
+    const [width, height] = resolution.split('x').map(Number);
+    
+    // Update UI to show starting state
     if (startBtn) startBtn.disabled = true;
-    if (stopBtn) stopBtn.disabled = false;
-    if (snapshotBtn) snapshotBtn.disabled = false;
-    if (fullscreenBtn) fullscreenBtn.disabled = false;
-    if (cameraSelect) cameraSelect.disabled = true;
-    
-    // Hide placeholder and show canvas
-    const placeholder = document.getElementById('video-placeholder');
-    if (placeholder) {
-        placeholder.style.display = 'none';
-    }
-    
-    // Update stream status
     updateStreamStatus('Starting...');
     
-    // Simulate stream start (will be replaced with actual WebSocket connection)
-    setTimeout(() => {
-        updateStreamStatus('Active');
-        updateStreamResolution('640x480');
-        updateStreamFPS('30');
-        
-        // Start mock video feed
-        startMockVideoFeed();
+    // Call API to start camera stream
+    fetch('/api/cameras/start', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            camera_index: parseInt(currentCamera),
+            resolution: [width, height],
+            fps: fps
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            streamActive = true;
+            
+            // Update UI
+            if (stopBtn) stopBtn.disabled = false;
+            if (snapshotBtn) snapshotBtn.disabled = false;
+            if (fullscreenBtn) fullscreenBtn.disabled = false;
+            if (cameraSelect) cameraSelect.disabled = true;
+            
+            // Hide placeholder and show canvas
+            const placeholder = document.getElementById('video-placeholder');
+            if (placeholder) {
+                placeholder.style.display = 'none';
+            }
+            
+            // Update stream info
+            updateStreamStatus('Active');
+            updateStreamResolution(resolution);
+            updateStreamFPS(fps.toString());
+            
+            // Start video feed
+            startVideoFeed();
+            
+            if (window.AOFVideoStream) {
+                window.AOFVideoStream.showNotification('Stream started successfully', 'success');
+            }
+        } else {
+            // Reset UI on failure
+            if (startBtn) startBtn.disabled = false;
+            updateStreamStatus('Failed');
+            
+            if (window.AOFVideoStream) {
+                window.AOFVideoStream.showNotification(data.error?.message || 'Failed to start stream', 'error');
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Error starting stream:', error);
+        // Reset UI on error
+        if (startBtn) startBtn.disabled = false;
+        updateStreamStatus('Error');
         
         if (window.AOFVideoStream) {
-            window.AOFVideoStream.showNotification('Stream started successfully', 'success');
+            window.AOFVideoStream.showNotification('Error starting stream', 'error');
         }
-    }, 1000);
+    });
 }
 
 function stopStream() {
@@ -174,85 +226,116 @@ function stopStream() {
     const fullscreenBtn = document.getElementById('fullscreen-btn');
     const cameraSelect = document.getElementById('camera-select');
     
-    streamActive = false;
-    currentCamera = null;
+    updateStreamStatus('Stopping...');
     
-    // Update UI
-    if (startBtn) startBtn.disabled = false;
-    if (stopBtn) stopBtn.disabled = true;
-    if (snapshotBtn) snapshotBtn.disabled = true;
-    if (fullscreenBtn) fullscreenBtn.disabled = true;
-    if (cameraSelect) cameraSelect.disabled = false;
+    // Call API to stop camera stream
+    fetch('/api/cameras/stop', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            streamActive = false;
+            currentCamera = null;
+            
+            // Stop video feed
+            stopVideoFeed();
+            
+            // Update UI
+            if (startBtn) startBtn.disabled = false;
+            if (stopBtn) stopBtn.disabled = true;
+            if (snapshotBtn) snapshotBtn.disabled = true;
+            if (fullscreenBtn) fullscreenBtn.disabled = true;
+            if (cameraSelect) cameraSelect.disabled = false;
+            
+            // Show placeholder and hide canvas content
+            const placeholder = document.getElementById('video-placeholder');
+            if (placeholder) {
+                placeholder.style.display = 'flex';
+            }
+            
+            // Clear canvas
+            if (canvasContext) {
+                canvasContext.clearRect(0, 0, videoCanvas.width, videoCanvas.height);
+            }
+            
+            // Update stream info
+            updateStreamStatus('Stopped');
+            updateStreamResolution('N/A');
+            updateStreamFPS('N/A');
+            updateStreamDevice('None');
+            
+            if (window.AOFVideoStream) {
+                window.AOFVideoStream.showNotification('Stream stopped successfully', 'success');
+            }
+        } else {
+            updateStreamStatus('Error');
+            if (window.AOFVideoStream) {
+                window.AOFVideoStream.showNotification(data.error?.message || 'Failed to stop stream', 'error');
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Error stopping stream:', error);
+        updateStreamStatus('Error');
+        if (window.AOFVideoStream) {
+            window.AOFVideoStream.showNotification('Error stopping stream', 'error');
+        }
+    });
+}
+
+// Video feed management
+let videoFeedInterval = null;
+
+function startVideoFeed() {
+    // Clear any existing video feed
+    stopVideoFeed();
     
-    // Show placeholder and hide canvas content
-    const placeholder = document.getElementById('video-placeholder');
-    if (placeholder) {
-        placeholder.style.display = 'flex';
-    }
-    
-    // Clear canvas
-    if (canvasContext && videoCanvas) {
-        canvasContext.clearRect(0, 0, videoCanvas.width, videoCanvas.height);
-    }
-    
-    // Update stream info
-    updateStreamStatus('Stopped');
-    updateStreamResolution('N/A');
-    updateStreamFPS('N/A');
-    updateStreamDevice('None');
-    
-    if (window.AOFVideoStream) {
-        window.AOFVideoStream.showNotification('Stream stopped', 'info');
+    // Start polling for video frames
+    videoFeedInterval = setInterval(() => {
+        if (streamActive) {
+            fetchVideoFrame();
+        }
+    }, 33); // ~30 FPS (1000ms / 30fps = 33ms)
+}
+
+function stopVideoFeed() {
+    if (videoFeedInterval) {
+        clearInterval(videoFeedInterval);
+        videoFeedInterval = null;
     }
 }
 
-function startMockVideoFeed() {
-    // Mock video feed with animated pattern
-    let frame = 0;
+function fetchVideoFrame() {
+    if (!streamActive || !canvasContext || !videoCanvas) return;
     
-    function drawFrame() {
-        if (!streamActive || !canvasContext || !videoCanvas) return;
-        
-        const width = videoCanvas.width;
-        const height = videoCanvas.height;
-        
-        // Create animated pattern
-        canvasContext.fillStyle = `hsl(${frame % 360}, 50%, 20%)`;
-        canvasContext.fillRect(0, 0, width, height);
-        
-        // Add grid pattern
-        canvasContext.strokeStyle = `hsl(${(frame + 180) % 360}, 70%, 50%)`;
-        canvasContext.lineWidth = 2;
-        
-        for (let x = 0; x < width; x += 50) {
-            canvasContext.beginPath();
-            canvasContext.moveTo(x, 0);
-            canvasContext.lineTo(x, height);
-            canvasContext.stroke();
-        }
-        
-        for (let y = 0; y < height; y += 50) {
-            canvasContext.beginPath();
-            canvasContext.moveTo(0, y);
-            canvasContext.lineTo(width, y);
-            canvasContext.stroke();
-        }
-        
-        // Add center text
-        canvasContext.fillStyle = 'white';
-        canvasContext.font = '24px Arial';
-        canvasContext.textAlign = 'center';
-        canvasContext.fillText('MOCK VIDEO FEED', width / 2, height / 2 - 20);
-        canvasContext.fillText(`Frame: ${frame}`, width / 2, height / 2 + 20);
-        
-        frame++;
-        
-        if (streamActive) {
-            setTimeout(drawFrame, 1000 / 30); // 30 FPS
-        }
-    }
-    
-    drawFrame();
+    fetch('/api/cameras/frame')
+        .then(response => {
+            if (response.ok) {
+                return response.blob();
+            } else {
+                throw new Error('Failed to fetch frame');
+            }
+        })
+        .then(blob => {
+            const img = new Image();
+            img.onload = function() {
+                // Draw the image to canvas
+                canvasContext.clearRect(0, 0, videoCanvas.width, videoCanvas.height);
+                canvasContext.drawImage(img, 0, 0, videoCanvas.width, videoCanvas.height);
+                URL.revokeObjectURL(img.src);
+            };
+            img.src = URL.createObjectURL(blob);
+        })
+        .catch(error => {
+            // Only log errors occasionally to avoid spam
+            if (Math.random() < 0.01) { // 1% chance to log
+                console.warn('Frame fetch error:', error);
+            }
+        });
 }
 
 function takeSnapshot() {
@@ -263,19 +346,34 @@ function takeSnapshot() {
         return;
     }
     
-    // Create download link
-    videoCanvas.toBlob(function(blob) {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `snapshot_${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
-        a.click();
-        URL.revokeObjectURL(url);
-        
-        if (window.AOFVideoStream) {
-            window.AOFVideoStream.showNotification('Snapshot saved', 'success');
-        }
-    });
+    // Get current frame from API and save it
+    fetch('/api/cameras/frame')
+        .then(response => {
+            if (response.ok) {
+                return response.blob();
+            } else {
+                throw new Error('Failed to fetch frame for snapshot');
+            }
+        })
+        .then(blob => {
+            // Create download link
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `snapshot_${new Date().toISOString().replace(/[:.]/g, '-')}.jpg`;
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            if (window.AOFVideoStream) {
+                window.AOFVideoStream.showNotification('Snapshot saved', 'success');
+            }
+        })
+        .catch(error => {
+            console.error('Snapshot error:', error);
+            if (window.AOFVideoStream) {
+                window.AOFVideoStream.showNotification('Failed to take snapshot', 'error');
+            }
+        });
 }
 
 function toggleFullscreen() {

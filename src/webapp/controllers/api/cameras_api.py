@@ -82,6 +82,7 @@ def start_camera_stream():
             resolution = tuple(resolution)
         
         # Start camera
+        logger.info(f"Camera device {camera_index} started {resolution} {fps} {quality}")
         success = camera_model.start_stream(camera_index, resolution, fps)
         
         if success:
@@ -265,15 +266,20 @@ def get_latest_frame():
         JPEG image or JSON error response
     """
     try:
-        # Implementation would get latest frame from camera model
-        # This is a placeholder for Phase 3 implementation
-        return jsonify({
-            'success': False,
-            'error': {
-                'message': 'Frame capture not yet implemented',
-                'code': 'NOT_IMPLEMENTED'
-            }
-        }), 501
+        # Get JPEG frame from camera model
+        frame_data = camera_model.get_frame_as_jpeg()
+        
+        if frame_data:
+            from flask import Response
+            return Response(frame_data, mimetype='image/jpeg')
+        else:
+            return jsonify({
+                'success': False,
+                'error': {
+                    'message': 'No frame available - camera may not be started',
+                    'code': 'NO_FRAME_AVAILABLE'
+                }
+            }), 404
         
     except Exception as e:
         logger.error(f"API Error getting frame: {e}")

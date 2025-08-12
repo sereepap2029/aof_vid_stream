@@ -66,10 +66,13 @@ class CameraManager:
                 return False
             device_id = default_device['id']
         
-        # Check if device is available
+        # Check if device is available - if not available, try to detect devices first
         if not self.device_detector.is_device_available(device_id):
-            logger.error(f"Camera device {device_id} is not available")
-            return False
+            logger.info(f"Device {device_id} not in cache, attempting to detect devices...")
+            detected = self.device_detector.detect_cameras()
+            if not detected or not self.device_detector.is_device_available(device_id):
+                logger.error(f"Camera device {device_id} is not available")
+                return False
         
         # Release current capture if any
         if self.current_capture is not None:

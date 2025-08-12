@@ -107,7 +107,7 @@ class VideoCapture:
             bool: True if resolution set successfully, False otherwise
         """
         if self.cap is None:
-            logger.error("Camera not initialized")
+            logger.error("Camera not initialized set_resolution")
             return False
         
         try:
@@ -139,7 +139,7 @@ class VideoCapture:
             bool: True if FPS set successfully, False otherwise
         """
         if self.cap is None:
-            logger.error("Camera not initialized")
+            logger.error("Camera not initialized set_fps")
             return False
         
         try:
@@ -184,7 +184,7 @@ class VideoCapture:
             return True
         
         if self.cap is None:
-            logger.error("Camera not initialized")
+            logger.error("Camera not initialized start_capture")
             return False
         
         self.is_running = True

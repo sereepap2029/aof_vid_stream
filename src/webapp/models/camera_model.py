@@ -81,11 +81,21 @@ class CameraModel:
             detected_devices = self.device_detector.detect_cameras()
             self._devices.clear()
             
+            # Update camera manager's device detector with the same detected devices
+            self.camera_manager.device_detector.available_devices = detected_devices
+            
             for device_info in detected_devices:
+                # Extract resolution from device_info
+                width = device_info.get('width', 640)
+                height = device_info.get('height', 480)
+                fps_detected = device_info.get('fps', 30)
+                
                 camera_device = CameraDevice(
                     index=device_info['id'],
                     name=device_info['name'],
                     is_available=device_info['available'],
+                    resolution=(width, height),
+                    fps=int(fps_detected),
                     last_seen=datetime.now()
                 )
                 self._devices.append(camera_device)
@@ -109,6 +119,7 @@ class CameraModel:
             True if stream started successfully, False otherwise
         """
         try:
+            self.video_capture = VideoCapture(camera_index)
             # Stop current stream if active
             if self._status.is_active:
                 self.stop_stream()
@@ -124,7 +135,8 @@ class CameraModel:
             self.camera_manager.set_fps(fps)
             
             # Start video capture
-            capture_success = self.video_capture.start_capture(camera_index)
+            self.video_capture.initialize()
+            capture_success = self.video_capture.start_capture()
             if not capture_success:
                 self._status.error_message = "Failed to start video capture"
                 self.camera_manager.release_camera()
@@ -187,13 +199,15 @@ class CameraModel:
             return None
         
         try:
-            frame = self.video_capture.get_frame()
-            if frame is not None:
+            # read_frame() returns (success, frame) tuple
+            success, frame = self.video_capture.read_frame()
+            if success and frame is not None:
                 self._current_frame = frame
                 self._status.frame_count += 1
                 self._status.last_frame_time = datetime.now()
-            
-            return frame
+                return frame
+            else:
+                return None
             
         except Exception as e:
             logger.error(f"Error getting frame: {e}")
@@ -215,6 +229,15 @@ class CameraModel:
             return None
         
         try:
+            # Validate frame is a proper numpy array
+            if not isinstance(frame, np.ndarray):
+                logger.error(f"Invalid frame type: {type(frame)}")
+                return None
+            
+            if frame.size == 0:
+                logger.error("Frame is empty")
+                return None
+            
             # Encode frame as JPEG
             encode_params = [cv2.IMWRITE_JPEG_QUALITY, quality]
             success, encoded_frame = cv2.imencode('.jpg', frame, encode_params)
@@ -227,6 +250,7 @@ class CameraModel:
                 
         except Exception as e:
             logger.error(f"Error encoding frame as JPEG: {e}")
+            logger.error(f"Frame type: {type(frame)}, shape: {getattr(frame, 'shape', 'No shape')}")
             return None
     
     def get_status(self) -> Dict[str, Any]:
