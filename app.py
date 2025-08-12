@@ -1,6 +1,25 @@
 #!/usr/bin/env python3
 """
-AOF Video Stream - Main Application Entry Point
+AOF Video Stream - Mai    print("Press Ctrl+C to stop the server")
+    print("=" * 60)
+    
+    try:
+        # Start the SocketIO server
+        socketio.run(
+            app,
+            host=config.HOST,
+            port=config.PORT,
+            debug=debug,
+            use_reloader=debug,
+            allow_unsafe_werkzeug=True  # For development only
+        )
+    except KeyboardInterrupt:
+        print("\n" + "=" * 60)
+        print("🛑 Server stopped by user")
+        print("=" * 60)
+    except Exception as e:
+        print(f"\n❌ Error starting server: {e}")
+        sys.exit(1)y Point
 
 This is the main entry point for the AOF Video Stream web application.
 It initializes the Flask app and starts the HTTP server.
@@ -25,13 +44,13 @@ def main():
     env = os.getenv('FLASK_ENV', 'development').lower()
     debug = env == 'development'
     
-    # Create Flask application
+    # Create Flask application with SocketIO
     if env == 'production':
         config = ProductionConfig
     else:
         config = DevelopmentConfig
     
-    app = create_app(config)
+    app, socketio = create_app(config)
     
     # Print startup information
     print("=" * 60)
@@ -47,6 +66,7 @@ def main():
     print("  • Home Page: http://localhost:5000/")
     print("  • Camera Interface: http://localhost:5000/camera")
     print("  • API Documentation: http://localhost:5000/api")
+    print("  • WebSocket Video: ws://localhost:5000/video")
     print("=" * 60)
     print("Press Ctrl+C to stop the server")
     print("=" * 60)

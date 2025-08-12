@@ -1,4 +1,5 @@
 // Camera control JavaScript for AOF Video Stream
+// Enhanced with WebSocket streaming support
 document.addEventListener('DOMContentLoaded', function() {
     console.log('AOF Video Stream - Camera JS Loaded');
     
@@ -10,6 +11,8 @@ let streamActive = false;
 let currentCamera = null;
 let videoCanvas = null;
 let canvasContext = null;
+let streamingMode = 'websocket'; // 'websocket' or 'polling'
+let wsVideoClient = null;
 
 function initializeCameraInterface() {
     // Get DOM elements
@@ -27,6 +30,9 @@ function initializeCameraInterface() {
     // Set default canvas size
     videoCanvas.width = 640;
     videoCanvas.height = 480;
+    
+    // Initialize WebSocket video client
+    wsVideoClient = initWebSocketVideo('video-canvas', 'stream-status');
     
     // Event listeners
     if (startBtn) {
@@ -56,6 +62,9 @@ function initializeCameraInterface() {
     if (cameraSelect) {
         cameraSelect.addEventListener('change', onCameraSelectionChange);
     }
+    
+    // Add streaming mode toggle
+    addStreamingModeToggle();
     
     // Initialize camera devices on load
     refreshCameraDevices();
@@ -136,6 +145,7 @@ function startStream() {
     const fullscreenBtn = document.getElementById('fullscreen-btn');
     const resolutionSelect = document.getElementById('resolution-select');
     const fpsSelect = document.getElementById('fps-select');
+    const qualitySelect = document.getElementById('quality-select');
     
     if (!cameraSelect || !cameraSelect.value) {
         if (window.AOFVideoStream) {
@@ -145,10 +155,12 @@ function startStream() {
     }
     
     currentCamera = cameraSelect.value;
-    console.log(`Selected camera: ${currentCamera}`);
-    // Get selected resolution and FPS
+    console.log(`Starting ${streamingMode} stream for camera: ${currentCamera}`);
+    
+    // Get selected settings
     let resolution = resolutionSelect ? resolutionSelect.value : '640x480';
     let fps = fpsSelect ? parseInt(fpsSelect.value) : 30;
+    let quality = qualitySelect ? getQualityValue(qualitySelect.value) : 85;
     
     // Parse resolution
     const [width, height] = resolution.split('x').map(Number);
@@ -157,67 +169,121 @@ function startStream() {
     if (startBtn) startBtn.disabled = true;
     updateStreamStatus('Starting...');
     
-    // Call API to start camera stream with quick start enabled
+    if (streamingMode === 'websocket') {
+        startWebSocketStream({
+            camera_index: parseInt(currentCamera),
+            resolution: [width, height],
+            fps: fps,
+            quality: quality
+        });
+    } else {
+        startPollingStream({
+            camera_index: parseInt(currentCamera),
+            resolution: [width, height],
+            fps: fps,
+            quality: quality
+        });
+    }
+}
+
+function startWebSocketStream(settings) {
+    // Connect to WebSocket if not connected
+    if (!wsVideoClient.isConnectionReady()) {
+        wsVideoClient.connect();
+        
+        // Wait for connection before starting stream
+        setTimeout(() => {
+            if (wsVideoClient.isConnectionReady()) {
+                wsVideoClient.startStream(settings);
+                handleStreamStartSuccess(settings);
+            } else {
+                handleStreamStartError('Failed to connect to WebSocket server');
+            }
+        }, 1000);
+    } else {
+        wsVideoClient.startStream(settings);
+        handleStreamStartSuccess(settings);
+    }
+    
+    // Set up success/error handling via event monitoring
+    setTimeout(() => {
+        if (wsVideoClient.isStreamingActive()) {
+            handleStreamStartSuccess(settings);
+        }
+    }, 2000);
+}
+
+function startPollingStream(settings) {
+    // Call REST API to start camera stream
     fetch('/api/cameras/start', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-            camera_index: parseInt(currentCamera),
-            resolution: [width, height],
-            fps: fps,
-            quick_start: true  // Enable optimized startup
+            camera_index: settings.camera_index,
+            resolution: settings.resolution,
+            fps: settings.fps,
+            quick_start: true
         })
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            streamActive = true;
-            
-            // Update UI
-            if (stopBtn) stopBtn.disabled = false;
-            if (snapshotBtn) snapshotBtn.disabled = false;
-            if (fullscreenBtn) fullscreenBtn.disabled = false;
-            if (cameraSelect) cameraSelect.disabled = true;
-            
-            // Hide placeholder and show canvas
-            const placeholder = document.getElementById('video-placeholder');
-            if (placeholder) {
-                placeholder.style.display = 'none';
-            }
-            
-            // Update stream info
-            updateStreamStatus('Active');
-            updateStreamResolution(resolution);
-            updateStreamFPS(fps.toString());
-            
-            // Start video feed
+            handleStreamStartSuccess(settings);
+            // Start polling for frames
             startVideoFeed();
-            
-            if (window.AOFVideoStream) {
-                window.AOFVideoStream.showNotification('Stream started successfully', 'success');
-            }
         } else {
-            // Reset UI on failure
-            if (startBtn) startBtn.disabled = false;
-            updateStreamStatus('Failed');
-            
-            if (window.AOFVideoStream) {
-                window.AOFVideoStream.showNotification(data.error?.message || 'Failed to start stream', 'error');
-            }
+            handleStreamStartError(data.error?.message || 'Failed to start stream');
         }
     })
     .catch(error => {
-        console.error('Error starting stream:', error);
-        // Reset UI on error
-        if (startBtn) startBtn.disabled = false;
-        updateStreamStatus('Error');
-        
-        if (window.AOFVideoStream) {
-            window.AOFVideoStream.showNotification('Error starting stream', 'error');
-        }
+        console.error('Error starting polling stream:', error);
+        handleStreamStartError('Error starting stream');
     });
+}
+
+function handleStreamStartSuccess(settings) {
+    streamActive = true;
+    
+    const stopBtn = document.getElementById('stop-btn');
+    const snapshotBtn = document.getElementById('snapshot-btn');
+    const fullscreenBtn = document.getElementById('fullscreen-btn');
+    const cameraSelect = document.getElementById('camera-select');
+    
+    // Update UI
+    if (stopBtn) stopBtn.disabled = false;
+    if (snapshotBtn) snapshotBtn.disabled = false;
+    if (fullscreenBtn) fullscreenBtn.disabled = false;
+    if (cameraSelect) cameraSelect.disabled = true;
+    
+    // Hide placeholder and show canvas
+    const placeholder = document.getElementById('video-placeholder');
+    if (placeholder) {
+        placeholder.style.display = 'none';
+    }
+    
+    // Update stream info
+    updateStreamStatus('Active');
+    updateStreamResolution(`${settings.resolution[0]}x${settings.resolution[1]}`);
+    updateStreamFPS(settings.fps.toString());
+    
+    if (window.AOFVideoStream) {
+        const mode = streamingMode === 'websocket' ? 'WebSocket' : 'HTTP Polling';
+        window.AOFVideoStream.showNotification(`${mode} stream started successfully`, 'success');
+    }
+}
+
+function handleStreamStartError(errorMessage) {
+    const startBtn = document.getElementById('start-btn');
+    
+    // Reset UI on failure
+    if (startBtn) startBtn.disabled = false;
+    updateStreamStatus('Failed');
+    
+    if (window.AOFVideoStream) {
+        window.AOFVideoStream.showNotification(errorMessage, 'error');
+    }
 }
 
 function stopStream() {
@@ -226,9 +292,34 @@ function stopStream() {
     const snapshotBtn = document.getElementById('snapshot-btn');
     const fullscreenBtn = document.getElementById('fullscreen-btn');
     const cameraSelect = document.getElementById('camera-select');
-    
+
+    if (startBtn) startBtn.disabled = false;
+    if (stopBtn) stopBtn.disabled = true;
+    if (snapshotBtn) snapshotBtn.disabled = true;
+    if (fullscreenBtn) fullscreenBtn.disabled = true;
+    if (cameraSelect) cameraSelect.disabled = false;
+
     updateStreamStatus('Stopping...');
     
+    if (streamingMode === 'websocket') {
+        stopWebSocketStream();
+    } else {
+        stopPollingStream();
+    }
+}
+
+function stopWebSocketStream() {
+    if (wsVideoClient) {
+        wsVideoClient.stopStream();
+    }
+    
+    // Handle UI updates
+    setTimeout(() => {
+        handleStreamStopSuccess();
+    }, 500);
+}
+
+function stopPollingStream() {
     // Call API to stop camera stream
     fetch('/api/cameras/stop', {
         method: 'POST',
@@ -239,39 +330,7 @@ function stopStream() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            streamActive = false;
-            currentCamera = null;
-            
-            // Stop video feed
-            stopVideoFeed();
-            
-            // Update UI
-            if (startBtn) startBtn.disabled = false;
-            if (stopBtn) stopBtn.disabled = true;
-            if (snapshotBtn) snapshotBtn.disabled = true;
-            if (fullscreenBtn) fullscreenBtn.disabled = true;
-            if (cameraSelect) cameraSelect.disabled = false;
-            
-            // Show placeholder and hide canvas content
-            const placeholder = document.getElementById('video-placeholder');
-            if (placeholder) {
-                placeholder.style.display = 'flex';
-            }
-            
-            // Clear canvas
-            if (canvasContext) {
-                canvasContext.clearRect(0, 0, videoCanvas.width, videoCanvas.height);
-            }
-            
-            // Update stream info
-            updateStreamStatus('Stopped');
-            updateStreamResolution('N/A');
-            updateStreamFPS('N/A');
-            updateStreamDevice('None');
-            
-            if (window.AOFVideoStream) {
-                window.AOFVideoStream.showNotification('Stream stopped successfully', 'success');
-            }
+            handleStreamStopSuccess();
         } else {
             updateStreamStatus('Error');
             if (window.AOFVideoStream) {
@@ -286,6 +345,51 @@ function stopStream() {
             window.AOFVideoStream.showNotification('Error stopping stream', 'error');
         }
     });
+}
+
+function handleStreamStopSuccess() {
+    streamActive = false;
+    currentCamera = null;
+    
+    const startBtn = document.getElementById('start-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    const snapshotBtn = document.getElementById('snapshot-btn');
+    const fullscreenBtn = document.getElementById('fullscreen-btn');
+    const cameraSelect = document.getElementById('camera-select');
+    
+    // Stop video feed if polling
+    if (streamingMode === 'polling') {
+        stopVideoFeed();
+    }
+    
+    // Update UI
+    if (startBtn) startBtn.disabled = false;
+    if (stopBtn) stopBtn.disabled = true;
+    if (snapshotBtn) snapshotBtn.disabled = true;
+    if (fullscreenBtn) fullscreenBtn.disabled = true;
+    if (cameraSelect) cameraSelect.disabled = false;
+    
+    // Show placeholder and hide canvas content
+    const placeholder = document.getElementById('video-placeholder');
+    if (placeholder) {
+        placeholder.style.display = 'flex';
+    }
+    
+    // Clear canvas
+    if (canvasContext) {
+        canvasContext.clearRect(0, 0, videoCanvas.width, videoCanvas.height);
+    }
+    
+    // Update stream info
+    updateStreamStatus('Stopped');
+    updateStreamResolution('N/A');
+    updateStreamFPS('N/A');
+    updateStreamDevice('None');
+    
+    if (window.AOFVideoStream) {
+        const mode = streamingMode === 'websocket' ? 'WebSocket' : 'HTTP Polling';
+        window.AOFVideoStream.showNotification(`${mode} stream stopped successfully`, 'success');
+    }
 }
 
 // Video feed management
@@ -459,6 +563,59 @@ function updateStreamDevice(device) {
     if (deviceElement) {
         deviceElement.textContent = device;
     }
+}
+
+function addStreamingModeToggle() {
+    // Find the camera controls section
+    const cameraControls = document.querySelector('.camera-controls');
+    if (!cameraControls) return;
+    
+    // Create streaming mode toggle
+    const modeToggle = document.createElement('div');
+    modeToggle.className = 'streaming-mode-toggle';
+    modeToggle.innerHTML = `
+        <label for="streaming-mode" class="mode-label">Streaming Mode:</label>
+        <select id="streaming-mode" class="control-select">
+            <option value="websocket" selected>WebSocket (Low Latency)</option>
+            <option value="polling">HTTP Polling (Compatible)</option>
+        </select>
+    `;
+    
+    // Add to camera controls
+    cameraControls.appendChild(modeToggle);
+    
+    // Add event listener
+    const modeSelect = document.getElementById('streaming-mode');
+    modeSelect.addEventListener('change', function() {
+        streamingMode = this.value;
+        console.log('Streaming mode changed to:', streamingMode);
+        
+        if (window.AOFVideoStream) {
+            const modeName = streamingMode === 'websocket' ? 'WebSocket (Low Latency)' : 'HTTP Polling (Compatible)';
+            window.AOFVideoStream.showNotification(`Switched to ${modeName} mode`, 'info');
+        }
+        
+        // If currently streaming, restart with new mode
+        if (streamActive) {
+            const shouldRestart = confirm('Switching streaming mode will restart the current stream. Continue?');
+            if (shouldRestart) {
+                stopStream();
+                setTimeout(() => {
+                    startStream();
+                }, 1000);
+            }
+        }
+    });
+}
+
+function getQualityValue(qualityString) {
+    const qualityMap = {
+        'low': 60,
+        'medium': 85,
+        'high': 95,
+        'ultra': 98
+    };
+    return qualityMap[qualityString] || 85;
 }
 
 function updateStreamInfo() {

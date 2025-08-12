@@ -107,5 +107,10 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<!-- Socket.IO for WebSocket video streaming -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+<!-- WebSocket video streaming client -->
+<script src="{{ url_for('static', filename='js/websocket-video.js') }}"></script>
+<!-- Enhanced camera controls with WebSocket support -->
 <script src="{{ url_for('static', filename='js/camera.js') }}"></script>
 {% endblock %}

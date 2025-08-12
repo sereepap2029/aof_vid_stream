@@ -5,22 +5,24 @@ This module contains the Flask application factory and initialization logic.
 """
 
 from flask import Flask, render_template, jsonify
-from typing import Type
+from flask_socketio import SocketIO
+from typing import Type, Tuple
 from .config import BaseConfig
 from .controllers import register_blueprints
+from .controllers.websocket_controller import init_websocket_streaming
 from .models import init_models
 from .views import register_template_filters, register_template_globals
 
 
-def create_app(config: Type[BaseConfig]) -> Flask:
+def create_app(config: Type[BaseConfig]) -> Tuple[Flask, SocketIO]:
     """
-    Create and configure the Flask application.
+    Create and configure the Flask application with SocketIO support.
     
     Args:
         config: Configuration class to use
         
     Returns:
-        Configured Flask application instance
+        Tuple of (Flask app, SocketIO instance)
     """
     
     # Create Flask application
@@ -33,9 +35,21 @@ def create_app(config: Type[BaseConfig]) -> Flask:
     # Load configuration
     app.config.from_object(config)
     
+    # Create SocketIO instance
+    socketio = SocketIO(
+        app,
+        cors_allowed_origins="*",
+        async_mode='threading',
+        logger=app.config.get('DEBUG', False),
+        engineio_logger= False #app.config.get('DEBUG', False)
+    )
+    
     # Initialize extensions and components
     init_extensions(app)
     init_models(app)
+    
+    # Initialize WebSocket streaming
+    init_websocket_streaming(socketio)
     
     # Register template utilities
     register_template_filters(app)
@@ -53,7 +67,7 @@ def create_app(config: Type[BaseConfig]) -> Flask:
     # Register CLI commands
     register_cli_commands(app)
     
-    return app
+    return app, socketio
 
 
 def init_extensions(app: Flask) -> None:

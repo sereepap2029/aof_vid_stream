@@ -275,6 +275,18 @@ body {
     flex-wrap: wrap;
 }
 
+.streaming-mode-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.mode-label {
+    font-weight: bold;
+    color: #555;
+    white-space: nowrap;
+}
+
 .control-select {
     padding: 0.5rem;
     border: 1px solid #ddd;
