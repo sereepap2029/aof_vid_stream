@@ -133,7 +133,32 @@ class WebSocketVideoStreamer:
             emit('stream_stopped', {
                 'timestamp': time.time()
             })
-        
+
+        @self.socketio.on('update_resolution', namespace='/video')
+        def handle_update_resolution(data):
+            """Handle resolution update request."""
+            client_id = request.sid
+            resolution = data.get('resolution', [640, 480])
+            
+            if client_id in self.active_connections:
+                self.active_connections[client_id]['resolution'] = resolution
+                logger.info(f"Updated resolution for client {client_id}: {resolution}")
+                
+                emit('resolution_updated', {
+                    'resolution': resolution,
+                    'timestamp': time.time()
+                })
+
+        @self.socketio.on('update_quality', namespace='/video')
+        def handle_update_quality(data):
+                self.active_connections[client_id]['quality'] = quality
+                logger.info(f"Updated quality for client {client_id}: {quality}")
+                
+                emit('quality_updated', {
+                    'quality': quality,
+                    'timestamp': time.time()
+                })
+
         @self.socketio.on('update_quality', namespace='/video')
         def handle_update_quality(data):
             """Handle quality update request."""
