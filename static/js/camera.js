@@ -73,8 +73,8 @@ function refreshCameraDevices() {
         refreshBtn.textContent = '🔄 Detecting...';
     }
     
-    // Call real API to get camera devices
-    fetch('/api/cameras/?refresh=true')
+    // Call real API to get camera devices with quick scan for faster response
+    fetch('/api/cameras/?refresh=true&quick_scan=true')
         .then(response => response.json())
         .then(data => {
             // Clear existing options
@@ -90,7 +90,7 @@ function refreshCameraDevices() {
                     });
                     
                     if (window.AOFVideoStream) {
-                        window.AOFVideoStream.showNotification(`Found ${data.data.count} camera(s)`, 'success');
+                        window.AOFVideoStream.showNotification(`Found ${data.data.count} camera(s) - Quick Scan`, 'success');
                     }
                 } else {
                     if (window.AOFVideoStream) {
@@ -157,7 +157,7 @@ function startStream() {
     if (startBtn) startBtn.disabled = true;
     updateStreamStatus('Starting...');
     
-    // Call API to start camera stream
+    // Call API to start camera stream with quick start enabled
     fetch('/api/cameras/start', {
         method: 'POST',
         headers: {
@@ -166,7 +166,8 @@ function startStream() {
         body: JSON.stringify({
             camera_index: parseInt(currentCamera),
             resolution: [width, height],
-            fps: fps
+            fps: fps,
+            quick_start: true  // Enable optimized startup
         })
     })
     .then(response => response.json())

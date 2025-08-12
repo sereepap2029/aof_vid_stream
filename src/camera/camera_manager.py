@@ -48,12 +48,13 @@ class CameraManager:
         """
         return self.available_devices
     
-    def initialize_camera(self, device_id: Optional[int] = None) -> bool:
+    def initialize_camera(self, device_id: Optional[int] = None, skip_device_check: bool = False) -> bool:
         """
         Initialize a camera device for video capture.
         
         Args:
             device_id (Optional[int]): Device ID to initialize. If None, uses default device.
+            skip_device_check (bool): Skip device availability check for faster initialization
             
         Returns:
             bool: True if initialization successful, False otherwise
@@ -66,13 +67,15 @@ class CameraManager:
                 return False
             device_id = default_device['id']
         
-        # Check if device is available - if not available, try to detect devices first
-        if not self.device_detector.is_device_available(device_id):
-            logger.info(f"Device {device_id} not in cache, attempting to detect devices...")
-            detected = self.device_detector.detect_cameras()
-            if not detected or not self.device_detector.is_device_available(device_id):
-                logger.error(f"Camera device {device_id} is not available")
-                return False
+        # Skip device checking for quick initialization
+        if not skip_device_check:
+            # Check if device is available - if not available, try to detect devices first
+            if not self.device_detector.is_device_available(device_id):
+                logger.info(f"Device {device_id} not in cache, attempting quick device detection...")
+                detected = self.device_detector.detect_cameras(max_devices=4, quick_scan=True)
+                if not detected or not self.device_detector.is_device_available(device_id):
+                    logger.error(f"Camera device {device_id} is not available")
+                    return False
         
         # Release current capture if any
         if self.current_capture is not None:
@@ -80,8 +83,8 @@ class CameraManager:
         
         # Initialize new capture
         try:
-            self.current_capture = VideoCapture(device_id)
-            if self.current_capture.initialize():
+            self.current_capture = VideoCapture(device_id, quick_init=True)
+            if self.current_capture.initialize(timeout_ms=1500):  # Shorter timeout
                 self.current_device_id = device_id
                 logger.info(f"Successfully initialized camera device {device_id}")
                 return True

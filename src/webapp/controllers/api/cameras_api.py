@@ -26,7 +26,9 @@ def get_cameras():
     """
     try:
         refresh = request.args.get('refresh', 'false').lower() == 'true'
-        devices = camera_model.get_devices(refresh=refresh)
+        quick_scan = request.args.get('quick_scan', 'true').lower() == 'true'
+        
+        devices = camera_model.get_devices(refresh=refresh, quick_scan=quick_scan)
         
         return jsonify({
             'success': True,
@@ -36,6 +38,7 @@ def get_cameras():
             },
             'meta': {
                 'refreshed': refresh,
+                'quick_scan': quick_scan,
                 'timestamp': camera_model.get_status().get('last_frame_time')
             }
         })
@@ -76,14 +79,15 @@ def start_camera_stream():
         resolution = data.get('resolution', [640, 480])
         fps = data.get('fps', 30)
         quality = data.get('quality', 'medium')
+        quick_start = data.get('quick_start', True)  # Enable quick start by default
         
         # Convert resolution to tuple if needed
         if isinstance(resolution, list):
             resolution = tuple(resolution)
         
-        # Start camera
-        logger.info(f"Camera device {camera_index} started {resolution} {fps} {quality}")
-        success = camera_model.start_stream(camera_index, resolution, fps)
+        # Start camera with optimization
+        logger.info(f"Starting camera device {camera_index} at {resolution} {fps}fps (quality: {quality}, quick: {quick_start})")
+        success = camera_model.start_stream(camera_index, resolution, fps, quick_start=quick_start)
         
         if success:
             # Get current status

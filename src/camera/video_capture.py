@@ -24,47 +24,61 @@ class VideoCapture:
     Handles video capture from a camera device.
     """
     
-    def __init__(self, device_id: int = 0):
+    def __init__(self, device_id: int = 0, quick_init: bool = True):
         """
         Initialize video capture for a specific device.
         
         Args:
             device_id (int): Camera device ID (default: 0)
+            quick_init (bool): Use quick initialization without full device detection
         """
         self.device_id = device_id
-        self.device_detector = DeviceDetector()
         self.cap: Optional[cv2.VideoCapture] = None
         self.is_running = False
         self.current_frame: Optional[np.ndarray] = None
         self.frame_lock = threading.Lock()
         self.capture_thread: Optional[threading.Thread] = None
         
-        # Get supported resolutions for this device
-        self.resolutions = self.device_detector.get_supported_resolutions(self.device_id)
-        
-        # Set default settings based on supported resolutions
-        if self.resolutions:
-            # Use the highest supported resolution (first in the list from our detector)
-            best_resolution = self.resolutions[0]
-            self.width = best_resolution['width']
-            self.height = best_resolution['height']
-            self.fps = best_resolution['fps']
-            logger.info(f"Using best supported resolution: {self.width}x{self.height} @ {self.fps}fps")
-            
-            # Log available resolutions for debugging
-            logger.info(f"Found {len(self.resolutions)} supported resolutions")
-            for i, res in enumerate(self.resolutions[:3]):  # Show first 3 resolutions
-                logger.info(f"  Resolution {i+1}: {res['width']}x{res['height']} @ {res['fps']}fps")
-        else:
-            # Fallback to standard defaults if no resolutions detected
+        if quick_init:
+            # Quick initialization: use standard defaults without device detection
             self.width = 640
             self.height = 480
             self.fps = 30
-            logger.warning(f"No supported resolutions found for device {self.device_id}, using defaults: {self.width}x{self.height} @ {self.fps}fps")
+            self.resolutions = []
+            logger.info(f"Quick init for device {device_id}: {self.width}x{self.height} @ {self.fps}fps")
+        else:
+            # Full initialization with device detection (slower but more accurate)
+            self.device_detector = DeviceDetector()
+            
+            # Get supported resolutions for this device
+            self.resolutions = self.device_detector.get_supported_resolutions(self.device_id)
+            
+            # Set default settings based on supported resolutions
+            if self.resolutions:
+                # Use the highest supported resolution (first in the list from our detector)
+                best_resolution = self.resolutions[0]
+                self.width = best_resolution['width']
+                self.height = best_resolution['height']
+                self.fps = best_resolution['fps']
+                logger.info(f"Using best supported resolution: {self.width}x{self.height} @ {self.fps}fps")
+                
+                # Log available resolutions for debugging
+                logger.info(f"Found {len(self.resolutions)} supported resolutions")
+                for i, res in enumerate(self.resolutions[:3]):  # Show first 3 resolutions
+                    logger.info(f"  Resolution {i+1}: {res['width']}x{res['height']} @ {res['fps']}fps")
+            else:
+                # Fallback to standard defaults if no resolutions detected
+                self.width = 640
+                self.height = 480
+                self.fps = 30
+                logger.warning(f"No supported resolutions found for device {self.device_id}, using defaults: {self.width}x{self.height} @ {self.fps}fps")
         
-    def initialize(self) -> bool:
+    def initialize(self, timeout_ms: int = 2000) -> bool:
         """
         Initialize the camera device.
+        
+        Args:
+            timeout_ms: Timeout in milliseconds for camera initialization
         
         Returns:
             bool: True if initialization successful, False otherwise
@@ -72,6 +86,9 @@ class VideoCapture:
         try:
             logger.info(f"Initializing camera device {self.device_id}")
             self.cap = cv2.VideoCapture(self.device_id)
+            
+            # Set timeout for faster initialization
+            self.cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, timeout_ms)
             
             if not self.cap.isOpened():
                 logger.error(f"Failed to open camera device {self.device_id}")
@@ -81,6 +98,9 @@ class VideoCapture:
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
             self.cap.set(cv2.CAP_PROP_FPS, self.fps)
+            
+            # Set buffer size to 1 for lower latency
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
             
             # Verify settings
             actual_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))

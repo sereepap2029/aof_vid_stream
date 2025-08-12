@@ -48,39 +48,75 @@ class CameraModel:
     and maintains the state of camera devices and streaming.
     """
     
+    # Class-level cache for devices to avoid repeated scanning
+    _cached_devices: List[CameraDevice] = []
+    _cache_timestamp: Optional[datetime] = None
+    _cache_duration_seconds = 30  # Cache devices for 30 seconds
+    
     def __init__(self):
         """Initialize the camera model."""
         self.camera_manager = CameraManager()
         self.device_detector = DeviceDetector()
         self.video_capture = VideoCapture()
         
-        self._devices: List[CameraDevice] = []
         self._status = CameraStatus()
         self._current_frame: Optional[np.ndarray] = None
         
-        logger.info("Camera model initialized")
+        # Use cached devices if available
+        if self._is_cache_valid():
+            self._devices = self._cached_devices.copy()
+            logger.info(f"Camera model initialized using cached devices ({len(self._devices)} devices)")
+        else:
+            self._devices: List[CameraDevice] = []
+            logger.info("Camera model initialized")
     
-    def get_devices(self, refresh: bool = False) -> List[Dict[str, Any]]:
+    @classmethod
+    def _is_cache_valid(cls) -> bool:
+        """Check if the device cache is still valid."""
+        if not cls._cached_devices or cls._cache_timestamp is None:
+            return False
+        
+        cache_age = (datetime.now() - cls._cache_timestamp).total_seconds()
+        return cache_age < cls._cache_duration_seconds
+    
+    @classmethod
+    def _update_cache(cls, devices: List[CameraDevice]) -> None:
+        """Update the device cache."""
+        cls._cached_devices = devices.copy()
+        cls._cache_timestamp = datetime.now()
+    
+    def get_devices(self, refresh: bool = False, quick_scan: bool = True) -> List[Dict[str, Any]]:
         """
         Get list of available camera devices.
         
         Args:
             refresh: Whether to refresh the device list
+            quick_scan: Use quick scanning for faster detection
             
         Returns:
             List of camera device dictionaries
         """
+        # Use cache if valid and not forcing refresh
+        if not refresh and self._is_cache_valid() and self._devices:
+            logger.info("Using cached camera devices")
+            return [asdict(device) for device in self._devices]
+        
         if refresh or not self._devices:
-            self._refresh_devices()
+            self._refresh_devices(quick_scan=quick_scan)
         
         return [asdict(device) for device in self._devices]
     
-    def _refresh_devices(self) -> None:
-        """Refresh the list of camera devices."""
+    def _refresh_devices(self, quick_scan: bool = True) -> None:
+        """
+        Refresh the list of camera devices.
+        
+        Args:
+            quick_scan: Use quick scanning for faster detection
+        """
         try:
-            detected_devices = self.device_detector.detect_cameras()
+            logger.info(f"Refreshing camera devices with {'quick' if quick_scan else 'full'} scan...")
+            detected_devices = self.device_detector.detect_cameras(max_devices=4, quick_scan=quick_scan)
             self._devices.clear()
-            
             # Update camera manager's device detector with the same detected devices
             self.camera_manager.device_detector.available_devices = detected_devices
             
@@ -100,13 +136,17 @@ class CameraModel:
                 )
                 self._devices.append(camera_device)
             
+            # Update class-level cache
+            self._update_cache(self._devices)
+            
             logger.info(f"Refreshed camera devices: {len(self._devices)} found")
             
         except Exception as e:
             logger.error(f"Error refreshing camera devices: {e}")
             self._status.error_message = str(e)
     
-    def start_stream(self, camera_index: int, resolution: Tuple[int, int] = (640, 480), fps: int = 30) -> bool:
+    def start_stream(self, camera_index: int, resolution: Tuple[int, int] = (640, 480), fps: int = 30, 
+                    quick_start: bool = True) -> bool:
         """
         Start streaming from a camera device.
         
@@ -114,33 +154,56 @@ class CameraModel:
             camera_index: Index of the camera device
             resolution: Video resolution as (width, height)
             fps: Frames per second
+            quick_start: Use optimized startup sequence
             
         Returns:
             True if stream started successfully, False otherwise
         """
         try:
-            self.video_capture = VideoCapture(camera_index)
+            logger.info(f"Starting {'quick' if quick_start else 'standard'} stream for camera {camera_index}")
+            
             # Stop current stream if active
             if self._status.is_active:
                 self.stop_stream()
             
-            # Initialize camera
-            success = self.camera_manager.initialize_camera(camera_index)
-            if not success:
-                self._status.error_message = f"Failed to initialize camera {camera_index}"
-                return False
-            
-            # Configure camera settings
-            self.camera_manager.set_resolution(*resolution)
-            self.camera_manager.set_fps(fps)
-            
-            # Start video capture
-            self.video_capture.initialize()
-            capture_success = self.video_capture.start_capture()
-            if not capture_success:
-                self._status.error_message = "Failed to start video capture"
-                self.camera_manager.release_camera()
-                return False
+            if quick_start:
+                # Quick start: Skip device validation and use direct VideoCapture
+                self.video_capture = VideoCapture(camera_index, quick_init=True)
+                
+                # Initialize camera with minimal configuration and shorter timeout
+                if not self.video_capture.initialize(timeout_ms=1500):
+                    self._status.error_message = f"Failed to initialize camera {camera_index}"
+                    return False
+                
+                # Set basic settings
+                self.video_capture.set_resolution(resolution[0], resolution[1])
+                self.video_capture.set_fps(fps)
+                
+                # Start capture immediately
+                capture_success = self.video_capture.start_capture()
+                if not capture_success:
+                    self._status.error_message = "Failed to start video capture"
+                    return False
+                
+            else:
+                # Standard start: Full validation and camera manager initialization
+                success = self.camera_manager.initialize_camera(camera_index, skip_device_check=False)
+                if not success:
+                    self._status.error_message = f"Failed to initialize camera {camera_index}"
+                    return False
+                
+                # Configure camera settings
+                self.camera_manager.set_resolution(*resolution)
+                self.camera_manager.set_fps(fps)
+                
+                # Start video capture
+                self.video_capture = VideoCapture(camera_index, quick_init=False)
+                self.video_capture.initialize()
+                capture_success = self.video_capture.start_capture()
+                if not capture_success:
+                    self._status.error_message = "Failed to start video capture"
+                    self.camera_manager.release_camera()
+                    return False
             
             # Update status
             self._status.is_active = True
@@ -323,5 +386,28 @@ class CameraModel:
             logger.error(f"Error during camera cleanup: {e}")
 
 
-# Global camera model instance
-camera_model = CameraModel()
+# Global camera model instance with pre-initialized cache
+camera_model = None
+
+def get_camera_model() -> CameraModel:
+    """
+    Get the global camera model instance, creating it if necessary.
+    This ensures we only have one instance and can cache device detection.
+    """
+    global camera_model
+    if camera_model is None:
+        logger.info("Creating global camera model instance...")
+        camera_model = CameraModel()
+        # Pre-populate cache with quick scan on first access
+        try:
+            camera_model.get_devices(refresh=True, quick_scan=True)
+            logger.info("Pre-populated camera device cache")
+        except Exception as e:
+            logger.warning(f"Failed to pre-populate camera cache: {e}")
+    return camera_model
+
+# Export the getter function
+__all__ = ['CameraModel', 'CameraDevice', 'CameraStatus', 'get_camera_model']
+
+# For backward compatibility, create the instance
+camera_model = get_camera_model()

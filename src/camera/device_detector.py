@@ -23,81 +23,91 @@ class DeviceDetector:
         """Initialize the device detector."""
         self.available_devices: List[Dict] = []
     
-    def detect_cameras(self, max_devices: int = 10) -> List[Dict]:
+    def detect_cameras(self, max_devices: int = 4, quick_scan: bool = True) -> List[Dict]:
         """
         Detect available camera devices on the system.
         
         Args:
-            max_devices (int): Maximum number of devices to check (default: 10)
+            max_devices (int): Maximum number of devices to check (default: 4 for faster scanning)
+            quick_scan (bool): If True, use quick detection with minimal testing
             
         Returns:
             List[Dict]: List of available camera devices with their properties
         """
-        logger.info("Starting camera device detection...")
+        logger.info(f"Starting {'quick' if quick_scan else 'full'} camera device detection...")
         self.available_devices = []
         
         for device_id in range(max_devices):
             try:
-                # Try to open the camera device
+                # Try to open the camera device with minimal timeout
                 cap = cv2.VideoCapture(device_id)
                 
+                # Set shorter timeout for faster detection
+                cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 1000)  # 1 second timeout
+                
                 if cap.isOpened():
-                    # Try to set camera to its maximum resolution first
-                    # Common high resolutions to test
-                    test_resolutions = [
-                        (1920, 1080),  # 1080p
-                        (1280, 720),   # 720p
-                        (960, 540),    # qHD
-                        (640, 480),    # VGA
-                    ]
-                    
-                    best_width, best_height = 640, 480  # Default fallback
-                    
-                    # Test each resolution to find the highest supported one
-                    for test_width, test_height in test_resolutions:
-                        cap.set(cv2.CAP_PROP_FRAME_WIDTH, test_width)
-                        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, test_height)
+                    if quick_scan:
+                        # Quick scan: use default resolution and test basic functionality
+                        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                        fps = cap.get(cv2.CAP_PROP_FPS)
                         
-                        # Verify what was actually set
-                        actual_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                        actual_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                        # Quick frame test - just try to read one frame
+                        ret, _ = cap.read()
                         
-                        # If we got close to what we requested, use it
-                        if actual_width >= test_width * 0.9 and actual_height >= test_height * 0.9:
-                            best_width, best_height = actual_width, actual_height
-                            break
-                    
-                    # Try to set higher FPS
-                    test_fps_values = [60, 30, 15]  # Test from highest to lowest
-                    best_fps = 30  # Default
-                    
-                    for test_fps in test_fps_values:
-                        cap.set(cv2.CAP_PROP_FPS, test_fps)
-                        actual_fps = cap.get(cv2.CAP_PROP_FPS)
+                        if ret:
+                            device_info = {
+                                'id': device_id,
+                                'name': f'Camera {device_id}',
+                                'width': width if width > 0 else 640,
+                                'height': height if height > 0 else 480,
+                                'fps': fps if fps > 0 else 30,
+                                'available': True
+                            }
+                            self.available_devices.append(device_info)
+                            logger.info(f"Quick detected camera device {device_id}: {width}x{height} @ {fps}fps")
+                    else:
+                        # Full scan with resolution testing (original behavior)
+                        test_resolutions = [
+                            (1920, 1080),  # 1080p
+                            (1280, 720),   # 720p
+                            (640, 480),    # VGA (reduced list for speed)
+                        ]
                         
-                        if actual_fps >= test_fps * 0.9:  # Allow 10% tolerance
-                            best_fps = actual_fps
-                            break
-                    
-                    # Get final properties after optimization
-                    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                    fps = cap.get(cv2.CAP_PROP_FPS)
-                    
-                    # Test if we can actually read from the camera
-                    ret, frame = cap.read()
-                    
-                    if ret and frame is not None:
-                        device_info = {
-                            'id': device_id,
-                            'name': f'Camera {device_id}',
-                            'width': width,
-                            'height': height,
-                            'fps': fps,
-                            'available': True
-                        }
-                        self.available_devices.append(device_info)
-                        logger.info(f"Found camera device {device_id}: {width}x{height} @ {fps}fps")
+                        best_width, best_height = 640, 480  # Default fallback
+                        
+                        # Test each resolution to find the highest supported one
+                        for test_width, test_height in test_resolutions:
+                            cap.set(cv2.CAP_PROP_FRAME_WIDTH, test_width)
+                            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, test_height)
+                            
+                            # Verify what was actually set
+                            actual_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                            actual_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                            
+                            # If we got close to what we requested, use it
+                            if actual_width >= test_width * 0.9 and actual_height >= test_height * 0.9:
+                                best_width, best_height = actual_width, actual_height
+                                break
+                        
+                        # Set FPS to 30 (skip multiple FPS testing for speed)
+                        cap.set(cv2.CAP_PROP_FPS, 30)
+                        fps = cap.get(cv2.CAP_PROP_FPS)
+                        
+                        # Test if we can actually read from the camera
+                        ret, frame = cap.read()
+                        
+                        if ret and frame is not None:
+                            device_info = {
+                                'id': device_id,
+                                'name': f'Camera {device_id}',
+                                'width': best_width,
+                                'height': best_height,
+                                'fps': fps if fps > 0 else 30,
+                                'available': True
+                            }
+                            self.available_devices.append(device_info)
+                            logger.info(f"Full detected camera device {device_id}: {best_width}x{best_height} @ {fps}fps")
                     
                     cap.release()
                     
