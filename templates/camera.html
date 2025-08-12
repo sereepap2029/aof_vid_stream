@@ -84,6 +84,15 @@
             </div>
             
             <div class="setting-group">
+                <label for="encoding-select" class="setting-label">Encoding:</label>
+                <select id="encoding-select" class="setting-select">
+                    <option value="binary" selected>Binary (Fastest)</option>
+                    <option value="base64">Base64 (Compatible)</option>
+                    <option value="compressed">Compressed (Experimental)</option>
+                </select>
+            </div>
+            
+            <div class="setting-group">
                 <button id="apply-settings-btn" class="btn btn-secondary">Apply Settings</button>
             </div>
         </div>

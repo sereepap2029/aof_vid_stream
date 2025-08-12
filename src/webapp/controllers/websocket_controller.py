@@ -10,6 +10,9 @@ import time
 import threading
 from typing import Optional, Dict, Any
 import logging
+import queue
+from concurrent.futures import ThreadPoolExecutor
+import zlib
 
 from flask import request
 from flask_socketio import SocketIO, emit, disconnect
@@ -27,6 +30,10 @@ class WebSocketVideoStreamer:
         self.socketio = socketio
         self.active_connections: Dict[str, Dict[str, Any]] = {}
         self.streaming_threads: Dict[str, threading.Thread] = {}
+        # Thread pool for encoding operations to avoid blocking
+        self.encoder_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="FrameEncoder")
+        # Frame queues for async processing
+        self.frame_queues: Dict[str, queue.Queue] = {}
         self.setup_handlers()
     
     def setup_handlers(self):
@@ -47,7 +54,13 @@ class WebSocketVideoStreamer:
                 'target_fps': 30,
                 'last_frame_time': 0,
                 'frame_count': 0,
-                'connection_time': time.time()
+                'connection_time': time.time(),
+                'performance_stats': {
+                    'avg_encode_time': 0,
+                    'avg_frame_size': 0,
+                    'frames_skipped': 0
+                },
+                'encoding_method': 'binary'  # binary, base64, compressed
             }
             
             emit('connection_status', {
@@ -203,6 +216,21 @@ class WebSocketVideoStreamer:
                     'timestamp': time.time()
                 })
         
+        @self.socketio.on('set_encoding_method', namespace='/video')
+        def handle_set_encoding_method(data):
+            """Handle encoding method change request."""
+            client_id = request.sid
+            method = data.get('method', 'binary')  # binary, base64, compressed
+            
+            if client_id in self.active_connections:
+                self.active_connections[client_id]['encoding_method'] = method
+                logger.info(f"Updated encoding method for client {client_id}: {method}")
+                
+                emit('encoding_method_updated', {
+                    'method': method,
+                    'timestamp': time.time()
+                })
+        
         @self.socketio.on('get_stats', namespace='/video')
         def handle_get_stats():
             """Handle statistics request."""
@@ -218,10 +246,28 @@ class WebSocketVideoStreamer:
                     'frame_count': conn_data['frame_count'],
                     'connection_time': time.time() - conn_data['connection_time'],
                     'camera_status': camera_status,
+                    'performance_stats': conn_data.get('performance_stats', {}),
                     'timestamp': time.time()
                 }
                 
                 emit('stream_stats', stats)
+        
+        @self.socketio.on('get_performance_stats', namespace='/video')
+        def handle_get_performance_stats():
+            """Handle performance statistics request."""
+            client_id = request.sid
+            
+            if client_id in self.active_connections:
+                conn_data = self.active_connections[client_id]
+                perf_stats = conn_data.get('performance_stats', {})
+                
+                emit('performance_stats', {
+                    'client_id': client_id,
+                    'avg_encode_time': perf_stats.get('avg_encode_time', 0),
+                    'avg_frame_size': perf_stats.get('avg_frame_size', 0),
+                    'frames_skipped': perf_stats.get('frames_skipped', 0),
+                    'timestamp': time.time()
+                })
     
     def start_stream_for_client(self, client_id: str):
         """Start streaming thread for a specific client."""
@@ -257,9 +303,36 @@ class WebSocketVideoStreamer:
         
         logger.info(f"Stopped streaming for client {client_id}")
     
+    def _encode_frame_fast(self, frame_data: bytes, method: str) -> tuple:
+        """Fast encoding methods for frame data."""
+        encode_start = time.time()
+        
+        if method == 'binary':
+            # Fastest: Direct binary transmission (no encoding needed)
+            encoded_data = frame_data
+            encode_time = time.time() - encode_start
+            return encoded_data, encode_time, 'binary'
+            
+        elif method == 'compressed':
+            # Compress then base64 encode
+            compressed = zlib.compress(frame_data, level=1)  # Fast compression
+            encoded_data = base64.b64encode(compressed).decode('utf-8')
+            encode_time = time.time() - encode_start
+            return encoded_data, encode_time, 'compressed'
+            
+        else:  # base64 (fallback)
+            # Traditional base64 encoding
+            encoded_data = base64.b64encode(frame_data).decode('utf-8')
+            encode_time = time.time() - encode_start
+            return encoded_data, encode_time, 'base64'
+    
     def _stream_worker(self, client_id: str):
         """Worker thread for streaming video frames to a specific client."""
         logger.info(f"Video streaming worker started for client {client_id}")
+        
+        # Performance optimization variables
+        last_encode_time = 0
+        last_frame_size = 0
         
         try:
             while True:
@@ -277,39 +350,110 @@ class WebSocketVideoStreamer:
                 
                 # Check if it's time for next frame
                 current_time = time.time()
-                if current_time - conn_data['last_frame_time'] < frame_interval:
+                time_since_last = current_time - conn_data['last_frame_time']
+                
+                # Frame timing: if we're behind, skip frames
+                if time_since_last < frame_interval * 0.8:  # 80% threshold
                     time.sleep(0.001)  # Short sleep to prevent busy waiting
                     continue
                 
-                # Get frame from camera
-                frame_data = camera_model.get_frame_as_jpeg(quality=conn_data['quality'])
+                # Use user-specified quality (no adaptive changes)
+                encode_start = time.time()
+                user_quality = conn_data['quality']
+                encoding_method = conn_data.get('encoding_method', 'binary')
+                
+                # Get frame from camera with user-specified quality
+                frame_data = camera_model.get_frame_as_jpeg(quality=user_quality)
                 
                 if frame_data:
-                    # Encode frame as base64 for WebSocket transmission
-                    frame_b64 = base64.b64encode(frame_data).decode('utf-8')
+                    # Get frame size
+                    current_frame_size = len(frame_data)
                     
-                    # Send frame to client
-                    self.socketio.emit('video_frame', {
-                        'frame': frame_b64,
-                        'timestamp': current_time,
-                        'frame_count': conn_data['frame_count'],
-                        'quality': conn_data['quality']
-                    }, namespace='/video', room=client_id)
+                    # Skip frame if it's too large and we have recent frame data
+                    if (current_frame_size > 150000 and  # >150KB (increased threshold)
+                        last_frame_size > 0 and 
+                        current_time - conn_data['last_frame_time'] < frame_interval * 2):
+                        time.sleep(0.005)
+                        conn_data['performance_stats']['frames_skipped'] += 1
+                        continue
                     
-                    # Update connection data
-                    conn_data['last_frame_time'] = current_time
-                    conn_data['frame_count'] += 1
+                    # Fast encoding based on method
+                    encoded_data, encode_time, actual_method = self._encode_frame_fast(frame_data, encoding_method)
+                    
+                    # Send frame to client with appropriate format
+                    try:
+                        if actual_method == 'binary':
+                            # Send binary data directly (much faster)
+                            self.socketio.emit('video_frame_binary', {
+                                'timestamp': current_time,
+                                'frame_count': conn_data['frame_count'],
+                                'quality': user_quality,
+                                'frame_size': current_frame_size,
+                                'encode_time': encode_time,
+                                'encoding': actual_method
+                            }, namespace='/video', room=client_id)
+                            # Send binary data separately
+                            self.socketio.emit('frame_data', encoded_data, namespace='/video', room=client_id)
+                        else:
+                            # Send text-based data (base64 or compressed)
+                            self.socketio.emit('video_frame', {
+                                'frame': encoded_data,
+                                'timestamp': current_time,
+                                'frame_count': conn_data['frame_count'],
+                                'quality': user_quality,
+                                'frame_size': current_frame_size,
+                                'encode_time': encode_time,
+                                'encoding': actual_method
+                            }, namespace='/video', room=client_id)
+                        
+                        # Update connection data
+                        conn_data['last_frame_time'] = current_time
+                        conn_data['frame_count'] += 1
+                        last_encode_time = encode_time
+                        last_frame_size = current_frame_size
+                        
+                        # Update performance statistics
+                        perf_stats = conn_data['performance_stats']
+                        
+                        # Running average of encode time
+                        if perf_stats['avg_encode_time'] == 0:
+                            perf_stats['avg_encode_time'] = encode_time
+                        else:
+                            perf_stats['avg_encode_time'] = (perf_stats['avg_encode_time'] * 0.9) + (encode_time * 0.1)
+                        
+                        # Running average of frame size
+                        if perf_stats['avg_frame_size'] == 0:
+                            perf_stats['avg_frame_size'] = current_frame_size
+                        else:
+                            perf_stats['avg_frame_size'] = (perf_stats['avg_frame_size'] * 0.9) + (current_frame_size * 0.1)
+                        
+                        # Log performance warnings
+                        if encode_time > frame_interval:
+                            logger.warning(f"Slow encoding for client {client_id}: {encode_time:.3f}s > {frame_interval:.3f}s")
+                        
+                    except Exception as emit_error:
+                        logger.error(f"Error emitting frame to client {client_id}: {emit_error}")
+                        # Don't break the loop, just skip this frame
+                        time.sleep(0.01)
+                        continue
+                        
                 else:
-                    # No frame available, short sleep
-                    time.sleep(0.01)
+                    # No frame available, adaptive sleep based on how long we've been waiting
+                    if time_since_last > frame_interval * 3:  # If we haven't had a frame for 3x the interval
+                        time.sleep(0.05)  # Longer sleep
+                    else:
+                        time.sleep(0.01)  # Short sleep
                 
         except Exception as e:
             logger.error(f"Error in streaming worker for client {client_id}: {e}")
             # Notify client of error
-            self.socketio.emit('stream_error', {
-                'error': str(e),
-                'code': 'STREAMING_ERROR'
-            }, namespace='/video', room=client_id)
+            try:
+                self.socketio.emit('stream_error', {
+                    'error': str(e),
+                    'code': 'STREAMING_ERROR'
+                }, namespace='/video', room=client_id)
+            except:
+                pass  # Don't let error notification errors crash the worker
         
         finally:
             logger.info(f"Video streaming worker finished for client {client_id}")

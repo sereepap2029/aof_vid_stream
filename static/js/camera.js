@@ -109,6 +109,23 @@ function initializeCameraInterface() {
     });
   }
 
+  // Add real-time encoding method update listener
+  const encodingSelect = document.getElementById("encoding-select");
+  if (encodingSelect) {
+    encodingSelect.addEventListener("change", function () {
+      const encoding = this.value;
+      console.log("Encoding method changed to:", encoding);
+
+      // Update encoding method in real-time if streaming
+      if (streamActive && streamingMode === "websocket" && wsVideoClient) {
+        wsVideoClient.setEncodingMethod(encoding);
+        const methodName = encoding === 'binary' ? 'Binary (Fastest)' : 
+                          encoding === 'compressed' ? 'Compressed' : 'Base64';
+        window.AOFVideoStream.showNotification(`Encoding updated to ${methodName}`, "info");
+      }
+    });
+  }
+
   // Add streaming mode toggle
   addStreamingModeToggle();
 

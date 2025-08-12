@@ -141,6 +141,14 @@ class WebSocketVideoClient {
       this.handleVideoFrame(data);
     });
 
+    this.socket.on("video_frame_binary", (data) => {
+      this.handleBinaryFrame(data);
+    });
+
+    this.socket.on("frame_data", (binaryData) => {
+      this.handleFrameData(binaryData);
+    });
+
     this.socket.on("stream_error", (data) => {
       console.error("Stream error:", data);
       this.updateStatus(`Error: ${data.error}`);
@@ -166,6 +174,11 @@ class WebSocketVideoClient {
       this.updateStatus(`Resolution updated: ${data.resolution[0]}x${data.resolution[1]}`);
     });
 
+    this.socket.on("encoding_method_updated", (data) => {
+      this.currentSettings.encoding = data.method;
+      this.updateStatus(`Encoding method updated: ${data.method}`);
+    });
+
     this.socket.on("connect_error", (error) => {
       console.error("WebSocket connection error:", error);
       this.updateStatus(`Connection error: ${error.message}`);
@@ -179,6 +192,11 @@ class WebSocketVideoClient {
     // Calculate latency
     this.latencyDisplay = frameTime - data.timestamp * 1000;
 
+    // Performance monitoring
+    const frameSize = data.frame_size || 0;
+    const encodeTime = data.encode_time || 0;
+    const quality = data.quality;
+
     // Create image from base64 data
     const img = new Image();
     img.onload = () => {
@@ -190,9 +208,23 @@ class WebSocketVideoClient {
       this.frameCount++;
       this.lastFrameTime = frameTime;
 
-      // Update status with performance info
-      const status = `Streaming: ${this.currentSettings.resolution[0]}x${this.currentSettings.resolution[1]} @ ${this.fpsDisplay}fps | Latency: ${Math.round(this.latencyDisplay)}ms | Quality: ${data.quality}`;
+      // Enhanced status with performance info
+      const sizeKB = Math.round(frameSize / 1024);
+      const encodeMs = Math.round(encodeTime * 1000);
+      const encoding = data.encoding || 'base64';
+      
+      const status = `Streaming: ${this.currentSettings.resolution[0]}x${this.currentSettings.resolution[1]} @ ${this.fpsDisplay}fps | ` +
+                    `Latency: ${Math.round(this.latencyDisplay)}ms | Quality: ${quality} | ` +
+                    `Frame: ${sizeKB}KB | Encode: ${encodeMs}ms | Method: ${encoding}`;
       this.updateStatus(status);
+
+      // Warn about performance issues
+      if (this.latencyDisplay > 200) {
+        console.warn(`High latency detected: ${Math.round(this.latencyDisplay)}ms`);
+      }
+      if (encodeTime > 0.05) { // >50ms encoding time
+        console.warn(`Slow encoding detected: ${encodeMs}ms`);
+      }
     };
 
     img.onerror = (error) => {
@@ -200,6 +232,71 @@ class WebSocketVideoClient {
     };
 
     img.src = "data:image/jpeg;base64," + data.frame;
+  }
+
+  handleBinaryFrame(metadata) {
+    // Store metadata for when binary data arrives
+    this.pendingBinaryFrame = {
+      ...metadata,
+      frameTime: Date.now()
+    };
+  }
+
+  handleFrameData(binaryData) {
+    if (!this.pendingBinaryFrame) {
+      console.warn('Received binary data without metadata');
+      return;
+    }
+
+    const metadata = this.pendingBinaryFrame;
+    this.pendingBinaryFrame = null;
+
+    // Calculate latency
+    this.latencyDisplay = metadata.frameTime - metadata.timestamp * 1000;
+
+    // Create blob and object URL for the image
+    const blob = new Blob([binaryData], { type: 'image/jpeg' });
+    const imageUrl = URL.createObjectURL(blob);
+
+    const img = new Image();
+    img.onload = () => {
+      // Clear canvas and draw frame
+      this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      this.context.drawImage(img, 0, 0, this.canvas.width, this.canvas.height);
+
+      // Update frame counter
+      this.frameCount++;
+      this.lastFrameTime = metadata.frameTime;
+
+      // Enhanced status with performance info
+      const sizeKB = Math.round(metadata.frame_size / 1024);
+      const encodeMs = Math.round(metadata.encode_time * 1000);
+      
+      const status = `Streaming: ${this.currentSettings.resolution[0]}x${this.currentSettings.resolution[1]} @ ${this.fpsDisplay}fps | ` +
+                    `Latency: ${Math.round(this.latencyDisplay)}ms | Quality: ${metadata.quality} | ` +
+                    `Frame: ${sizeKB}KB | Encode: ${encodeMs}ms | Method: ${metadata.encoding}`;
+      this.updateStatus(status);
+
+      // Clean up object URL
+      URL.revokeObjectURL(imageUrl);
+    };
+
+    img.onerror = (error) => {
+      console.error("Error loading binary frame:", error);
+      URL.revokeObjectURL(imageUrl);
+    };
+
+    img.src = imageUrl;
+  }
+
+  setEncodingMethod(method) {
+    if (!this.isConnected) {
+      return false;
+    }
+    
+    console.log('Setting encoding method:', method);
+    this.socket.emit('set_encoding_method', { method: method });
+    return true;
   }
 
   startStream(settings = {}) {
