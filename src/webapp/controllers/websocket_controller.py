@@ -144,18 +144,20 @@ class WebSocketVideoStreamer:
                 self.active_connections[client_id]['resolution'] = resolution
                 logger.info(f"Updated resolution for client {client_id}: {resolution}")
                 
+                # Update camera settings in real-time
+                try:
+                    camera_status = camera_model.get_status()
+                    if camera_status['is_active']:
+                        success = camera_model.update_settings(resolution=tuple(resolution))
+                        if success:
+                            logger.info(f"Camera resolution updated to {resolution}")
+                        else:
+                            logger.warning(f"Failed to update camera resolution to {resolution}")
+                except Exception as e:
+                    logger.error(f"Error updating camera resolution: {e}")
+                
                 emit('resolution_updated', {
                     'resolution': resolution,
-                    'timestamp': time.time()
-                })
-
-        @self.socketio.on('update_quality', namespace='/video')
-        def handle_update_quality(data):
-                self.active_connections[client_id]['quality'] = quality
-                logger.info(f"Updated quality for client {client_id}: {quality}")
-                
-                emit('quality_updated', {
-                    'quality': quality,
                     'timestamp': time.time()
                 })
 
@@ -183,6 +185,18 @@ class WebSocketVideoStreamer:
             if client_id in self.active_connections:
                 self.active_connections[client_id]['target_fps'] = fps
                 logger.info(f"Updated FPS for client {client_id}: {fps}")
+                
+                # Update camera settings in real-time
+                try:
+                    camera_status = camera_model.get_status()
+                    if camera_status['is_active']:
+                        success = camera_model.update_settings(fps=fps)
+                        if success:
+                            logger.info(f"Camera FPS updated to {fps}")
+                        else:
+                            logger.warning(f"Failed to update camera FPS to {fps}")
+                except Exception as e:
+                    logger.error(f"Error updating camera FPS: {e}")
                 
                 emit('fps_updated', {
                     'fps': fps,

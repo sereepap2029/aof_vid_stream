@@ -161,6 +161,11 @@ class WebSocketVideoClient {
       this.updateStatus(`FPS updated: ${data.fps}`);
     });
 
+    this.socket.on("resolution_updated", (data) => {
+      this.currentSettings.resolution = data.resolution;
+      this.updateStatus(`Resolution updated: ${data.resolution[0]}x${data.resolution[1]}`);
+    });
+
     this.socket.on("connect_error", (error) => {
       console.error("WebSocket connection error:", error);
       this.updateStatus(`Connection error: ${error.message}`);
