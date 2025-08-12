@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}AOF Video Stream - Home{% endblock %}
+
+{% block content %}
+<div class="hero-section">
+    <div class="hero-content">
+        <h2 class="hero-title">Welcome to AOF Video Stream</h2>
+        <p class="hero-description">
+            Real-time video streaming from your camera devices to the web browser.
+            Connect, stream, and monitor your camera feeds with ease.
+        </p>
+        <div class="hero-actions">
+            <a href="{{ url_for('main.camera') }}" class="btn btn-primary">Start Streaming</a>
+            <a href="#features" class="btn btn-secondary">Learn More</a>
+        </div>
+    </div>
+</div>
+
+<section id="features" class="features-section">
+    <h3 class="section-title">Features</h3>
+    <div class="features-grid">
+        <div class="feature-card">
+            <div class="feature-icon">📹</div>
+            <h4 class="feature-title">Real-time Streaming</h4>
+            <p class="feature-description">
+                Stream live video from your camera devices directly to your web browser
+                with minimal latency.
+            </p>
+        </div>
+        
+        <div class="feature-card">
+            <div class="feature-icon">🔧</div>
+            <h4 class="feature-title">Device Management</h4>
+            <p class="feature-description">
+                Automatically detect and manage multiple camera devices with 
+                easy switching capabilities.
+            </p>
+        </div>
+        
+        <div class="feature-card">
+            <div class="feature-icon">⚙️</div>
+            <h4 class="feature-title">Quality Control</h4>
+            <p class="feature-description">
+                Adjust video resolution, frame rate, and streaming quality to
+                optimize performance for your needs.
+            </p>
+        </div>
+        
+        <div class="feature-card">
+            <div class="feature-icon">🌐</div>
+            <h4 class="feature-title">Web Interface</h4>
+            <p class="feature-description">
+                Access your camera streams from any modern web browser with
+                our responsive interface.
+            </p>
+        </div>
+    </div>
+</section>
+
+<section class="status-section">
+    <h3 class="section-title">System Status</h3>
+    <div class="status-grid">
+        <div class="status-item">
+            <span class="status-label">Camera System:</span>
+            <span class="status-value" id="camera-status">Checking...</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">Available Devices:</span>
+            <span class="status-value" id="device-count">Detecting...</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">Streaming:</span>
+            <span class="status-value" id="streaming-status">Ready</span>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Basic status checking functionality
+    document.addEventListener('DOMContentLoaded', function() {
+        // Simulate camera status check
+        setTimeout(() => {
+            document.getElementById('camera-status').textContent = 'Online';
+            document.getElementById('camera-status').className = 'status-value status-online';
+        }, 1000);
+        
+        // Simulate device count
+        setTimeout(() => {
+            document.getElementById('device-count').textContent = '1 Device(s)';
+        }, 1500);
+    });
+</script>
+{% endblock %}

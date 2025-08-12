@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}AOF Video Stream - Camera{% endblock %}
+
+{% block content %}
+<div class="camera-section">
+    <div class="camera-header">
+        <h2 class="camera-title">Camera Stream</h2>
+        <div class="camera-controls">
+            <select id="camera-select" class="control-select">
+                <option value="">Select Camera...</option>
+            </select>
+            <button id="start-btn" class="btn btn-success">Start Stream</button>
+            <button id="stop-btn" class="btn btn-danger" disabled>Stop Stream</button>
+        </div>
+    </div>
+
+    <div class="video-container">
+        <div class="video-wrapper">
+            <canvas id="video-canvas" class="video-display">
+                Your browser does not support the HTML5 canvas element.
+            </canvas>
+            <div id="video-placeholder" class="video-placeholder">
+                <div class="placeholder-content">
+                    <div class="placeholder-icon">📷</div>
+                    <h3>No Video Stream</h3>
+                    <p>Select a camera and click "Start Stream" to begin</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="video-info">
+            <div class="info-item">
+                <span class="info-label">Status:</span>
+                <span id="stream-status" class="info-value">Stopped</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Resolution:</span>
+                <span id="stream-resolution" class="info-value">N/A</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">FPS:</span>
+                <span id="stream-fps" class="info-value">N/A</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Device:</span>
+                <span id="stream-device" class="info-value">None</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="camera-settings">
+        <h3 class="settings-title">Stream Settings</h3>
+        <div class="settings-grid">
+            <div class="setting-group">
+                <label for="resolution-select" class="setting-label">Resolution:</label>
+                <select id="resolution-select" class="setting-select">
+                    <option value="640x480">640 x 480</option>
+                    <option value="800x600">800 x 600</option>
+                    <option value="1024x768">1024 x 768</option>
+                    <option value="1280x720">1280 x 720 (HD)</option>
+                    <option value="1920x1080">1920 x 1080 (Full HD)</option>
+                </select>
+            </div>
+            
+            <div class="setting-group">
+                <label for="fps-select" class="setting-label">Frame Rate:</label>
+                <select id="fps-select" class="setting-select">
+                    <option value="15">15 FPS</option>
+                    <option value="24">24 FPS</option>
+                    <option value="30" selected>30 FPS</option>
+                    <option value="60">60 FPS</option>
+                </select>
+            </div>
+            
+            <div class="setting-group">
+                <label for="quality-select" class="setting-label">Quality:</label>
+                <select id="quality-select" class="setting-select">
+                    <option value="low">Low</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="high">High</option>
+                    <option value="ultra">Ultra</option>
+                </select>
+            </div>
+            
+            <div class="setting-group">
+                <button id="apply-settings-btn" class="btn btn-secondary">Apply Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="camera-actions">
+        <h3 class="actions-title">Actions</h3>
+        <div class="actions-grid">
+            <button id="snapshot-btn" class="btn btn-info" disabled>
+                📸 Take Snapshot
+            </button>
+            <button id="fullscreen-btn" class="btn btn-secondary" disabled>
+                🔍 Fullscreen
+            </button>
+            <button id="refresh-devices-btn" class="btn btn-warning">
+                🔄 Refresh Devices
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/camera.js') }}"></script>
+{% endblock %}

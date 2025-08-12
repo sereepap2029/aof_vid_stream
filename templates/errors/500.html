@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block title %}500 - Internal Server Error{% endblock %}
+
+{% block content %}
+<div class="error-page">
+    <div class="error-container">
+        <div class="error-icon">
+            <h1>500</h1>
+        </div>
+        <div class="error-content">
+            <h2>Internal Server Error</h2>
+            <p>Something went wrong on our end. We're working to fix the issue.</p>
+            
+            <div class="error-actions">
+                <a href="{{ url_for('main.index') }}" class="btn btn-primary">Go Home</a>
+                <button onclick="location.reload()" class="btn btn-secondary">Try Again</button>
+            </div>
+            
+            <div class="error-help">
+                <h3>What happened?</h3>
+                <p>The server encountered an unexpected condition that prevented it from fulfilling your request.</p>
+                
+                <h3>What can you do?</h3>
+                <ul>
+                    <li>Try refreshing the page</li>
+                    <li>Go back to the <a href="{{ url_for('main.index') }}">homepage</a></li>
+                    <li>Check if the camera is properly connected</li>
+                    <li>Wait a few minutes and try again</li>
+                </ul>
+                
+                {% if get_app_config('DEBUG') %}
+                <div class="debug-info">
+                    <h3>Debug Information</h3>
+                    <p><strong>Note:</strong> This information is only shown in debug mode.</p>
+                    <p>If you continue to see this error, check the server logs for more details.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.error-page {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 60vh;
+    text-align: center;
+    padding: 2rem;
+}
+
+.error-container {
+    max-width: 600px;
+    width: 100%;
+}
+
+.error-icon h1 {
+    font-size: 8rem;
+    color: #e74c3c;
+    margin: 0;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+}
+
+.error-content h2 {
+    font-size: 2rem;
+    color: #2c3e50;
+    margin: 1rem 0;
+}
+
+.error-content p {
+    font-size: 1.1rem;
+    color: #666;
+    margin-bottom: 2rem;
+    line-height: 1.6;
+}
+
+.error-actions {
+    margin: 2rem 0;
+}
+
+.error-actions .btn {
+    margin: 0.5rem;
+}
+
+.error-help {
+    text-align: left;
+    background: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-top: 2rem;
+}
+
+.error-help h3 {
+    color: #2c3e50;
+    margin: 1rem 0 0.5rem 0;
+}
+
+.error-help p {
+    color: #555;
+    margin: 0.5rem 0;
+    font-size: 1rem;
+}
+
+.error-help ul {
+    list-style-type: disc;
+    padding-left: 1.5rem;
+    margin: 0.5rem 0;
+}
+
+.error-help li {
+    margin: 0.5rem 0;
+    color: #555;
+}
+
+.error-help a {
+    color: #3498db;
+    text-decoration: none;
+}
+
+.error-help a:hover {
+    text-decoration: underline;
+}
+
+.debug-info {
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 4px;
+    padding: 1rem;
+    margin-top: 1rem;
+}
+
+.debug-info h3 {
+    color: #856404;
+}
+
+.debug-info p {
+    color: #856404;
+}
+
+@media (max-width: 768px) {
+    .error-icon h1 {
+        font-size: 6rem;
+    }
+    
+    .error-content h2 {
+        font-size: 1.5rem;
+    }
+    
+    .error-actions {
+        flex-direction: column;
+    }
+    
+    .error-actions .btn {
+        width: 100%;
+        margin: 0.25rem 0;
+    }
+}
+</style>
+{% endblock %}
