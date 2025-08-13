@@ -79,15 +79,16 @@ def start_camera_stream():
         resolution = data.get('resolution', [640, 480])
         fps = data.get('fps', 30)
         quality = data.get('quality', 'medium')
+        codec = data.get('codec', '')  # Get codec parameter
         quick_start = data.get('quick_start', True)  # Enable quick start by default
         
         # Convert resolution to tuple if needed
         if isinstance(resolution, list):
             resolution = tuple(resolution)
         
-        # Start camera with optimization
-        logger.info(f"Starting camera device {camera_index} at {resolution} {fps}fps (quality: {quality}, quick: {quick_start})")
-        success = camera_model.start_stream(camera_index, resolution, fps, quick_start=quick_start)
+        # Start camera with optimization and codec
+        logger.info(f"Starting camera device {camera_index} at {resolution} {fps}fps (quality: {quality}, codec: {codec}, quick: {quick_start})")
+        success = camera_model.start_stream(camera_index, resolution, fps, quick_start=quick_start, codec=codec)
         
         if success:
             # Get current status
@@ -367,6 +368,285 @@ def cameras_api_bad_request(error):
             'code': 'CAMERA_BAD_REQUEST'
         }
     }), 400
+
+
+@cameras_bp.route('/encoding/status')
+def get_encoding_status():
+    """
+    Get hardware encoding status and capabilities.
+    
+    Returns:
+        JSON response with encoding information
+    """
+    try:
+        encoding_enabled = camera_model.is_hardware_encoding_enabled()
+        performance_stats = camera_model.get_encoding_performance()
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'hardware_encoding_enabled': encoding_enabled,
+                'performance': performance_stats
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"API Error getting encoding status: {e}")
+        return jsonify({
+            'success': False,
+            'error': {
+                'message': f'Failed to get encoding status: {str(e)}',
+                'code': 'ENCODING_STATUS_ERROR'
+            }
+        }), 500
+
+
+@cameras_bp.route('/encoding/enable', methods=['POST'])
+def enable_hardware_encoding():
+    """
+    Enable hardware encoding.
+    
+    Returns:
+        JSON response with operation result
+    """
+    try:
+        data = request.get_json() or {}
+        
+        # Reinitialize with specific parameters if provided
+        width = data.get('width')
+        height = data.get('height')
+        fps = data.get('fps')
+        
+        success = camera_model.set_hardware_encoding(True)
+        
+        if success and (width or height or fps):
+            camera_model.reinitialize_hardware_encoder(width, height, fps)
+        
+        if success:
+            performance_stats = camera_model.get_encoding_performance()
+            return jsonify({
+                'success': True,
+                'data': {
+                    'message': 'Hardware encoding enabled',
+                    'performance': performance_stats
+                }
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': {
+                    'message': 'Failed to enable hardware encoding',
+                    'code': 'ENCODING_ENABLE_ERROR'
+                }
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"API Error enabling hardware encoding: {e}")
+        return jsonify({
+            'success': False,
+            'error': {
+                'message': f'Failed to enable hardware encoding: {str(e)}',
+                'code': 'ENCODING_ENABLE_ERROR'
+            }
+        }), 500
+
+
+@cameras_bp.route('/encoding/disable', methods=['POST'])
+def disable_hardware_encoding():
+    """
+    Disable hardware encoding (fallback to software).
+    
+    Returns:
+        JSON response with operation result
+    """
+    try:
+        success = camera_model.set_hardware_encoding(False)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'data': {
+                    'message': 'Hardware encoding disabled, using software encoding'
+                }
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': {
+                    'message': 'Failed to disable hardware encoding',
+                    'code': 'ENCODING_DISABLE_ERROR'
+                }
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"API Error disabling hardware encoding: {e}")
+        return jsonify({
+            'success': False,
+            'error': {
+                'message': f'Failed to disable hardware encoding: {str(e)}',
+                'code': 'ENCODING_DISABLE_ERROR'
+            }
+        }), 500
+
+
+@cameras_bp.route('/encoding/performance')
+def get_encoding_performance():
+    """
+    Get detailed encoding performance statistics.
+    
+    Returns:
+        JSON response with performance data
+    """
+    try:
+        performance_stats = camera_model.get_encoding_performance()
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'performance': performance_stats,
+                'timestamp': camera_model.get_status().get('last_frame_time')
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"API Error getting encoding performance: {e}")
+        return jsonify({
+            'success': False,
+            'error': {
+                'message': f'Failed to get encoding performance: {str(e)}',
+                'code': 'ENCODING_PERFORMANCE_ERROR'
+            }
+        }), 500
+
+
+@cameras_bp.route('/codecs')
+def get_available_codecs():
+    """
+    Get list of available video codecs on the server.
+    
+    Returns:
+        JSON response with available codecs
+    """
+    try:
+        available_codecs = camera_model.get_available_codecs()
+        current_codec = camera_model.get_current_codec_info()
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'available_codecs': available_codecs,
+                'current_codec': current_codec
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"API Error getting available codecs: {e}")
+        return jsonify({
+            'success': False,
+            'error': {
+                'message': f'Failed to get available codecs: {str(e)}',
+                'code': 'CODECS_ERROR'
+            }
+        }), 500
+
+
+@cameras_bp.route('/codec', methods=['POST'])
+def set_codec():
+    """
+    Set the video codec for encoding.
+    
+    Expects JSON: {"codec": "H264"}
+    
+    Returns:
+        JSON response with operation result
+    """
+    try:
+        data = request.get_json()
+        if not data or 'codec' not in data:
+            return jsonify({
+                'success': False,
+                'error': {
+                    'message': 'Missing codec parameter',
+                    'code': 'MISSING_CODEC'
+                }
+            }), 400
+        
+        codec = data['codec']
+        
+        # Validate codec
+        available_codecs = camera_model.get_available_codecs()
+        if codec != 'auto' and codec not in available_codecs:
+            return jsonify({
+                'success': False,
+                'error': {
+                    'message': f'Codec "{codec}" not available. Available: {list(available_codecs.keys())}',
+                    'code': 'INVALID_CODEC'
+                }
+            }), 400
+        
+        success = camera_model.set_codec(codec)
+        
+        if success:
+            current_codec = camera_model.get_current_codec_info()
+            performance_stats = camera_model.get_encoding_performance()
+            
+            return jsonify({
+                'success': True,
+                'data': {
+                    'message': f'Codec set to {codec}',
+                    'current_codec': current_codec,
+                    'performance': performance_stats
+                }
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': {
+                    'message': f'Failed to set codec to {codec}',
+                    'code': 'CODEC_SET_ERROR'
+                }
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"API Error setting codec: {e}")
+        return jsonify({
+            'success': False,
+            'error': {
+                'message': f'Failed to set codec: {str(e)}',
+                'code': 'CODEC_SET_ERROR'
+            }
+        }), 500
+
+
+@cameras_bp.route('/codec')
+def get_current_codec():
+    """
+    Get information about the currently selected codec.
+    
+    Returns:
+        JSON response with current codec information
+    """
+    try:
+        current_codec = camera_model.get_current_codec_info()
+        performance_stats = camera_model.get_encoding_performance()
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'current_codec': current_codec,
+                'performance': performance_stats
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"API Error getting current codec: {e}")
+        return jsonify({
+            'success': False,
+            'error': {
+                'message': f'Failed to get current codec: {str(e)}',
+                'code': 'CODEC_GET_ERROR'
+            }
+        }), 500
 
 
 @cameras_bp.errorhandler(404)

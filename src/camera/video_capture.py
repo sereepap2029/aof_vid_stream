@@ -228,14 +228,29 @@ class VideoCapture:
     
     def _capture_loop(self):
         """Internal method for continuous frame capture."""
+        frame_failures = 0
+        max_failures = 5  # Allow up to 5 consecutive failures before stopping
+        
         while self.is_running:
             ret, frame = self.read_frame()
             
             if ret and frame is not None:
                 with self.frame_lock:
                     self.current_frame = frame.copy()
+                frame_failures = 0  # Reset failure count on successful read
             else:
-                logger.warning("Failed to read frame")
+                frame_failures += 1
+                logger.warning(f"Failed to read frame (attempt {frame_failures}/{max_failures})")
+                
+                # If we have too many consecutive failures, stop capture
+                if frame_failures >= max_failures:
+                    logger.error(f"Too many consecutive frame read failures ({max_failures}), stopping capture")
+                    self.is_running = False
+                    # Release the camera to disconnect
+                    if self.cap is not None:
+                        self.cap.release()
+                        self.cap = None
+                    break
             
             time.sleep(1.0 / self.fps)  # Control frame rate
     
@@ -251,6 +266,15 @@ class VideoCapture:
                 return self.current_frame.copy()
             return None
     
+    def is_healthy(self) -> bool:
+        """
+        Check if the camera capture is healthy and running.
+        
+        Returns:
+            bool: True if camera is running and healthy, False otherwise
+        """
+        return self.is_running and self.cap is not None and self.cap.isOpened()
+    
     def get_camera_properties(self) -> Dict[str, Any]:
         """
         Get current camera properties.
@@ -259,7 +283,12 @@ class VideoCapture:
             Dict[str, Any]: Dictionary of camera properties
         """
         if self.cap is None:
-            return {}
+            return {
+                'device_id': self.device_id,
+                'is_running': False,
+                'is_healthy': False,
+                'status': 'disconnected'
+            }
         
         properties = {
             'device_id': self.device_id,
@@ -270,7 +299,9 @@ class VideoCapture:
             'contrast': self.cap.get(cv2.CAP_PROP_CONTRAST),
             'saturation': self.cap.get(cv2.CAP_PROP_SATURATION),
             'hue': self.cap.get(cv2.CAP_PROP_HUE),
-            'is_running': self.is_running
+            'is_running': self.is_running,
+            'is_healthy': self.is_healthy(),
+            'status': 'healthy' if self.is_healthy() else ('running' if self.is_running else 'stopped')
         }
         
         return properties

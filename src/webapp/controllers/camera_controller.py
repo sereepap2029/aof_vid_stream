@@ -358,6 +358,62 @@ def stream_video():
         return jsonify({'error': str(e)}), 500
 
 
+@camera_bp.route('/stream/stats')
+def get_stream_stats():
+    """
+    Get current streaming statistics including bitrate.
+    
+    Returns:
+        JSON response with streaming statistics
+    """
+    try:
+        import time
+        
+        # Get WebSocket streaming stats
+        from .websocket_controller import get_websocket_streamer
+        ws_streamer = get_websocket_streamer()
+        
+        stats = {
+            'camera_status': camera_model.get_status(),
+            'websocket_stats': None,
+            'timestamp': time.time()
+        }
+        
+        if ws_streamer:
+            ws_stats = ws_streamer.get_connection_stats()
+            stats['websocket_stats'] = ws_stats
+            
+            # Calculate aggregate statistics
+            if ws_stats['connections']:
+                total_bitrate = sum(conn.get('current_bitrate_mbps', 0) 
+                                  for conn in ws_stats['connections'].values())
+                total_bytes = sum(conn.get('total_bytes_sent', 0) 
+                                for conn in ws_stats['connections'].values())
+                avg_frame_size = sum(conn.get('avg_frame_size', 0) 
+                                   for conn in ws_stats['connections'].values())
+                if ws_stats['active_streams'] > 0:
+                    avg_frame_size /= ws_stats['active_streams']
+                
+                stats['aggregate_stats'] = {
+                    'total_bitrate_mbps': total_bitrate,
+                    'total_bytes_sent': total_bytes,
+                    'average_frame_size_kb': avg_frame_size / 1024 if avg_frame_size > 0 else 0,
+                    'active_streams': ws_stats['active_streams']
+                }
+        
+        return jsonify({
+            'success': True,
+            'stats': stats
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting stream stats: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @camera_bp.route('/test')
 def test_camera():
     """

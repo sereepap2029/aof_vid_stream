@@ -20,6 +20,15 @@ class WebSocketVideoClient {
     this.fpsDisplay = 0;
     this.latencyDisplay = 0;
 
+    // Bitrate tracking
+    this.bitrateWindow = 5000; // 5 second window
+    this.frameDataHistory = [];
+    this.currentBitrateMbps = 0;
+
+    // Performance stats polling
+    this.statsInterval = null;
+    this.statsPollingRate = 1000; // 1 second
+
     // Stream settings
     this.currentSettings = {
       camera_index: 1,
@@ -99,6 +108,9 @@ class WebSocketVideoClient {
 
       this.drawMessage("Disconnected from Server");
 
+      // Stop performance stats polling
+      this.stopStatsPolling();
+
       // Attempt reconnection
       this.attemptReconnect();
     });
@@ -127,6 +139,9 @@ class WebSocketVideoClient {
       console.log("Stream started:", data);
 
       this.drawMessage("Starting Video Stream...");
+
+      // Start performance stats polling
+      this.startStatsPolling();
     });
 
     this.socket.on("stream_stopped", (data) => {
@@ -135,6 +150,9 @@ class WebSocketVideoClient {
       console.log("Stream stopped:", data);
 
       this.drawMessage("Stream Stopped");
+      
+      // Stop performance stats polling
+      this.stopStatsPolling();
     });
 
     this.socket.on("video_frame", (data) => {
@@ -157,6 +175,24 @@ class WebSocketVideoClient {
 
     this.socket.on("stream_stats", (data) => {
       console.log("Stream stats:", data);
+      
+      // Update bitrate and quality display if functions are available
+      if (typeof window.updateBitrateDisplay === 'function') {
+        const bitrateInMbps = data.performance_stats?.current_bitrate_mbps || 0;
+        const quality = data.performance_stats?.quality || 100;
+        window.updateBitrateDisplay(bitrateInMbps, quality);
+      }
+      
+      // Update performance stats for WebSocket mode
+      if (typeof window.updatePerformanceStats === 'function' && data.performance_stats) {
+        const perfStats = data.performance_stats;
+        window.updatePerformanceStats({
+          chunkRate: Math.round((data.frame_count || 0) / Math.max(1, data.connection_time || 1)), // frames per second approximation
+          bufferSize: perfStats.avg_frame_size || 0,
+          lostChunks: perfStats.frames_skipped || 0,
+          reassemblyTime: Math.round((perfStats.avg_encode_time || 0) * 1000) // convert to ms
+        });
+      }
     });
 
     this.socket.on("quality_updated", (data) => {
@@ -177,6 +213,15 @@ class WebSocketVideoClient {
     this.socket.on("encoding_method_updated", (data) => {
       this.currentSettings.encoding = data.method;
       this.updateStatus(`Encoding method updated: ${data.method}`);
+    });
+
+    this.socket.on("max_bitrate_updated", (data) => {
+      console.log("Max bitrate updated:", data);
+      if (data.max_bitrate_kbps > 0) {
+        this.updateStatus(`Max bitrate set: ${data.max_bitrate_kbps} kbps (${data.enabled ? 'enabled' : 'disabled'})`);
+      } else {
+        this.updateStatus("Max bitrate limit removed (unlimited)");
+      }
     });
 
     this.socket.on("connect_error", (error) => {
@@ -208,14 +253,21 @@ class WebSocketVideoClient {
       this.frameCount++;
       this.lastFrameTime = frameTime;
 
-      // Enhanced status with performance info
+      // Update bitrate calculation
+      this.updateBitrate(frameSize);
+
+      // Enhanced status with performance info including bitrate
       const sizeKB = Math.round(frameSize / 1024);
       const encodeMs = Math.round(encodeTime * 1000);
       const encoding = data.encoding || 'base64';
+      const bitrateMbps = this.currentBitrateMbps.toFixed(2);
+      const bitrateControl = data.bitrate_control ? ' [BC]' : '';
+      const qualityInfo = data.base_quality !== data.quality ? 
+        `${data.quality} (base: ${data.base_quality})` : `${data.quality}`;
       
       const status = `Streaming: ${this.currentSettings.resolution[0]}x${this.currentSettings.resolution[1]} @ ${this.fpsDisplay}fps | ` +
-                    `Latency: ${Math.round(this.latencyDisplay)}ms | Quality: ${quality} | ` +
-                    `Frame: ${sizeKB}KB | Encode: ${encodeMs}ms | Method: ${encoding}`;
+                    `Latency: ${Math.round(this.latencyDisplay)}ms | Quality: ${qualityInfo}${bitrateControl} | ` +
+                    `Frame: ${sizeKB}KB | Encode: ${encodeMs}ms | Method: ${encoding} | Bitrate: ${bitrateMbps} Mbps`;
       this.updateStatus(status);
 
       // Warn about performance issues
@@ -268,13 +320,20 @@ class WebSocketVideoClient {
       this.frameCount++;
       this.lastFrameTime = metadata.frameTime;
 
-      // Enhanced status with performance info
+      // Update bitrate calculation
+      this.updateBitrate(metadata.frame_size);
+
+      // Enhanced status with performance info including bitrate
       const sizeKB = Math.round(metadata.frame_size / 1024);
       const encodeMs = Math.round(metadata.encode_time * 1000);
+      const bitrateMbps = this.currentBitrateMbps.toFixed(2);
+      const bitrateControl = metadata.bitrate_control ? ' [BC]' : '';
+      const qualityInfo = metadata.base_quality !== metadata.quality ? 
+        `${metadata.quality} (base: ${metadata.base_quality})` : `${metadata.quality}`;
       
       const status = `Streaming: ${this.currentSettings.resolution[0]}x${this.currentSettings.resolution[1]} @ ${this.fpsDisplay}fps | ` +
-                    `Latency: ${Math.round(this.latencyDisplay)}ms | Quality: ${metadata.quality} | ` +
-                    `Frame: ${sizeKB}KB | Encode: ${encodeMs}ms | Method: ${metadata.encoding}`;
+                    `Latency: ${Math.round(this.latencyDisplay)}ms | Quality: ${qualityInfo}${bitrateControl} | ` +
+                    `Frame: ${sizeKB}KB | Encode: ${encodeMs}ms | Method: ${metadata.encoding} | Bitrate: ${bitrateMbps} Mbps`;
       this.updateStatus(status);
 
       // Clean up object URL
@@ -296,6 +355,16 @@ class WebSocketVideoClient {
     
     console.log('Setting encoding method:', method);
     this.socket.emit('set_encoding_method', { method: method });
+    return true;
+  }
+
+  setMaxBitrate(maxBitrateKbps) {
+    if (!this.isConnected) {
+      return false;
+    }
+    
+    console.log('Setting max bitrate:', maxBitrateKbps, 'kbps');
+    this.socket.emit('set_max_bitrate', { max_bitrate_kbps: maxBitrateKbps });
     return true;
   }
 
@@ -372,6 +441,10 @@ class WebSocketVideoClient {
 
     this.isConnected = false;
     this.isStreaming = false;
+    
+    // Stop performance stats polling
+    this.stopStatsPolling();
+    
     this.updateStatus("Disconnected");
     this.drawMessage("Disconnected");
   }
@@ -427,6 +500,31 @@ class WebSocketVideoClient {
     return this.isStreaming;
   }
 
+  updateBitrate(frameSize) {
+    const now = Date.now();
+    
+    // Add current frame data
+    this.frameDataHistory.push({
+      timestamp: now,
+      size: frameSize
+    });
+    
+    // Remove data older than our window
+    const cutoff = now - this.bitrateWindow;
+    this.frameDataHistory = this.frameDataHistory.filter(frame => frame.timestamp > cutoff);
+    
+    // Calculate bitrate
+    if (this.frameDataHistory.length > 1) {
+      const totalBytes = this.frameDataHistory.reduce((sum, frame) => sum + frame.size, 0);
+      const timeSpan = (now - this.frameDataHistory[0].timestamp) / 1000; // Convert to seconds
+      
+      if (timeSpan > 0) {
+        const bitsPerSecond = (totalBytes * 8) / timeSpan;
+        this.currentBitrateMbps = bitsPerSecond / 1_000_000; // Convert to Mbps
+      }
+    }
+  }
+
   getCurrentSettings() {
     return { ...this.currentSettings };
   }
@@ -437,7 +535,30 @@ class WebSocketVideoClient {
       latency: this.latencyDisplay,
       frameCount: this.frameCount,
       uptime: this.startTime ? (Date.now() - this.startTime) / 1000 : 0,
+      bitrateMbps: this.currentBitrateMbps,
     };
+  }
+
+  startStatsPolling() {
+    // Clear any existing interval
+    this.stopStatsPolling();
+    
+    // Start requesting stats every second
+    this.statsInterval = setInterval(() => {
+      if (this.isStreaming && this.isConnected) {
+        this.socket.emit("get_stats");
+      }
+    }, this.statsPollingRate);
+    
+    console.log("Started performance stats polling");
+  }
+
+  stopStatsPolling() {
+    if (this.statsInterval) {
+      clearInterval(this.statsInterval);
+      this.statsInterval = null;
+      console.log("Stopped performance stats polling");
+    }
   }
 }
 

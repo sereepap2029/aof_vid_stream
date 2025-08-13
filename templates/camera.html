@@ -10,6 +10,11 @@
             <select id="camera-select" class="control-select">
                 <option value="">Select Camera...</option>
             </select>
+            <select id="stream-mode-select" class="control-select">
+                <option value="websocket" selected>WebSocket (Standard)</option>
+                <option value="webrtc">WebRTC (High Performance)</option>
+                <option value="polling">HTTP Polling (Compatible)</option>
+            </select>
             <button id="start-btn" class="btn btn-success">Start Stream</button>
             <button id="stop-btn" class="btn btn-danger" disabled>Stop Stream</button>
         </div>
@@ -46,6 +51,32 @@
                 <span class="info-label">Device:</span>
                 <span id="stream-device" class="info-value">None</span>
             </div>
+            <div class="info-item">
+                <span class="info-label">Bitrate:</span>
+                <span id="stream-bitrate" class="info-value">0 Mbps</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Quality:</span>
+                <span id="stream-quality" class="info-value">100%</span>
+            </div>
+            <div id="performance-stats" class="performance-stats" style="display: none;">
+                <div class="info-item">
+                    <span class="info-label">Chunk Rate:</span>
+                    <span id="chunk-rate" class="info-value">0 chunks/s</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Buffer Size:</span>
+                    <span id="buffer-size" class="info-value">0 KB</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Lost Chunks:</span>
+                    <span id="lost-chunks" class="info-value">0</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Reassembly:</span>
+                    <span id="reassembly-time" class="info-value">0 ms</span>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -59,7 +90,7 @@
                     <option value="800x600">800 x 600</option>
                     <option value="1024x768">1024 x 768</option>
                     <option value="1280x720">1280 x 720 (HD)</option>
-                    <option value="1920x1080">1920 x 1080 (Full HD)</option>
+                    <option value="1920x1080" selected>1920 x 1080 (Full HD)</option>
                 </select>
             </div>
             
@@ -68,8 +99,8 @@
                 <select id="fps-select" class="setting-select">
                     <option value="15">15 FPS</option>
                     <option value="24">24 FPS</option>
-                    <option value="30" selected>30 FPS</option>
-                    <option value="60">60 FPS</option>
+                    <option value="30">30 FPS</option>
+                    <option value="60" selected>60 FPS (WebRTC)</option>
                 </select>
             </div>
             
@@ -93,7 +124,71 @@
             </div>
             
             <div class="setting-group">
+                <label for="codec-select" class="setting-label">Video Codec:</label>
+                <select id="codec-select" class="setting-select">
+                    <option value="auto" selected>Auto (Best Available)</option>
+                    <option value="H264">H.264 (Most Compatible)</option>
+                    <option value="H265">H.265 (Best Quality)</option>
+                    <option value="VP8">VP8 (WebM)</option>
+                    <option value="VP9">VP9 (WebM)</option>
+                    <option value="MJPG">Motion JPEG</option>
+                    <option value="JPEG">JPEG (Fallback)</option>
+                </select>
+                <small class="setting-help">Choose codec for hardware encoding</small>
+            </div>
+            
+            <div class="setting-group">
+                <label for="max-bitrate-input" class="setting-label">Max Bitrate (kbps):</label>
+                <input type="number" id="max-bitrate-input" class="setting-input" 
+                       placeholder="0 = unlimited" min="0" max="50000" step="100" value="0">
+                <small class="setting-help">Set maximum bitrate limit (0 for unlimited)</small>
+            </div>
+            
+            <div class="setting-group">
+                <label for="hardware-encoding-toggle" class="setting-label">Hardware Encoding:</label>
+                <div class="toggle-container">
+                    <input type="checkbox" id="hardware-encoding-toggle" class="toggle-checkbox" checked>
+                    <label for="hardware-encoding-toggle" class="toggle-label">
+                        <span class="toggle-switch"></span>
+                        <span class="toggle-text">Enable NVIDIA NVENC</span>
+                    </label>
+                </div>
+                <small class="setting-help">Use GPU acceleration for better performance</small>
+            </div>
+            
+            <div class="setting-group">
                 <button id="apply-settings-btn" class="btn btn-secondary">Apply Settings</button>
+            </div>
+        </div>
+        
+        <!-- Hardware Encoding Status -->
+        <div class="encoding-status">
+            <h4 class="status-title">Encoding Status</h4>
+            <div class="status-grid">
+                <div class="status-item">
+                    <span class="status-label">Method:</span>
+                    <span id="encoding-method" class="status-value">Loading...</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Codec:</span>
+                    <span id="current-codec" class="status-value">Auto</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">FourCC:</span>
+                    <span id="current-fourcc" class="status-value">N/A</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Frames Encoded:</span>
+                    <span id="frames-encoded" class="status-value">0</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Avg Encode Time:</span>
+                    <span id="avg-encode-time" class="status-value">0 ms</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Capability:</span>
+                    <span id="encoding-fps-capability" class="status-value">0 FPS</span>
+                </div>
             </div>
         </div>
     </div>
@@ -120,6 +215,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
 <!-- WebSocket video streaming client -->
 <script src="{{ url_for('static', filename='js/websocket-video.js') }}"></script>
+<!-- WebRTC video streaming client -->
+<script src="{{ url_for('static', filename='js/webrtc-video.js') }}"></script>
 <!-- Enhanced camera controls with WebSocket support -->
 <script src="{{ url_for('static', filename='js/camera.js') }}"></script>
 {% endblock %}

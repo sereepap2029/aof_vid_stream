@@ -11,8 +11,9 @@ let streamActive = false;
 let currentCamera = null;
 let videoCanvas = null;
 let canvasContext = null;
-let streamingMode = "websocket"; // 'websocket' or 'polling'
+let streamingMode = "websocket"; // 'websocket', 'webrtc', or 'polling'
 let wsVideoClient = null;
+let webrtcClient = null;
 
 function initializeCameraInterface() {
   // Get DOM elements
@@ -33,6 +34,11 @@ function initializeCameraInterface() {
 
   // Initialize WebSocket video client
   wsVideoClient = initWebSocketVideo("video-canvas", "stream-status");
+  
+  // Initialize WebRTC video client (if available)
+  if (typeof initWebRTCVideo === 'function') {
+    webrtcClient = initWebRTCVideo("video-canvas", "stream-status");
+  }
 
   // Event listeners
   if (startBtn) {
@@ -59,6 +65,12 @@ function initializeCameraInterface() {
     applySettingsBtn.addEventListener("click", applyStreamSettings);
   }
 
+  // Hardware encoding toggle
+  const hardwareEncodingToggle = document.getElementById("hardware-encoding-toggle");
+  if (hardwareEncodingToggle) {
+    hardwareEncodingToggle.addEventListener("change", toggleHardwareEncoding);
+  }
+
   if (cameraSelect) {
     cameraSelect.addEventListener("change", onCameraSelectionChange);
   }
@@ -72,9 +84,14 @@ function initializeCameraInterface() {
       console.log("Resolution changed to:", resolution);
 
       // Update resolution in real-time if streaming
-      if (streamActive && streamingMode === "websocket" && wsVideoClient) {
-        wsVideoClient.updateResolution(width, height);
-        window.AOFVideoStream.showNotification(`Resolution updated to ${this.value}`, "info");
+      if (streamActive) {
+        if (streamingMode === "websocket" && wsVideoClient) {
+          wsVideoClient.updateResolution(width, height);
+          window.AOFVideoStream.showNotification(`Resolution updated to ${this.value}`, "info");
+        } else if (streamingMode === "webrtc" && webrtcClient) {
+          webrtcClient.updateResolution(width, height);
+          window.AOFVideoStream.showNotification(`Resolution updated to ${this.value}`, "info");
+        }
       }
     });
   }
@@ -87,11 +104,22 @@ function initializeCameraInterface() {
       console.log("Quality changed to:", quality);
 
       // Update quality in real-time if streaming
-      if (streamActive && streamingMode === "websocket" && wsVideoClient) {
-        wsVideoClient.updateQuality(quality);
-        window.AOFVideoStream.showNotification(`Quality updated to ${this.value}`, "info");
+      if (streamActive) {
+        if (streamingMode === "websocket" && wsVideoClient) {
+          wsVideoClient.updateQuality(quality);
+          window.AOFVideoStream.showNotification(`Quality updated to ${this.value}`, "info");
+        } else if (streamingMode === "webrtc" && webrtcClient) {
+          webrtcClient.updateQuality(quality);
+          window.AOFVideoStream.showNotification(`Quality updated to ${this.value}`, "info");
+        }
       }
     });
+  }
+
+  // Add codec selection listener
+  const codecSelect = document.getElementById("codec-select");
+  if (codecSelect) {
+    codecSelect.addEventListener("change", onCodecSelectionChange);
   }
 
   // Add real-time FPS update listener
@@ -102,9 +130,14 @@ function initializeCameraInterface() {
       console.log("FPS changed to:", fps);
 
       // Update FPS in real-time if streaming
-      if (streamActive && streamingMode === "websocket" && wsVideoClient) {
-        wsVideoClient.updateFPS(fps);
-        window.AOFVideoStream.showNotification(`FPS updated to ${fps}`, "info");
+      if (streamActive) {
+        if (streamingMode === "websocket" && wsVideoClient) {
+          wsVideoClient.updateFPS(fps);
+          window.AOFVideoStream.showNotification(`FPS updated to ${fps}`, "info");
+        } else if (streamingMode === "webrtc" && webrtcClient) {
+          webrtcClient.updateFPS(fps);
+          window.AOFVideoStream.showNotification(`FPS updated to ${fps}`, "info");
+        }
       }
     });
   }
@@ -117,11 +150,18 @@ function initializeCameraInterface() {
       console.log("Encoding method changed to:", encoding);
 
       // Update encoding method in real-time if streaming
-      if (streamActive && streamingMode === "websocket" && wsVideoClient) {
-        wsVideoClient.setEncodingMethod(encoding);
-        const methodName = encoding === 'binary' ? 'Binary (Fastest)' : 
-                          encoding === 'compressed' ? 'Compressed' : 'Base64';
-        window.AOFVideoStream.showNotification(`Encoding updated to ${methodName}`, "info");
+      if (streamActive) {
+        if (streamingMode === "websocket" && wsVideoClient) {
+          wsVideoClient.setEncodingMethod(encoding);
+          const methodName = encoding === 'binary' ? 'Binary (Fastest)' : 
+                            encoding === 'compressed' ? 'Compressed' : 'Base64';
+          window.AOFVideoStream.showNotification(`Encoding updated to ${methodName}`, "info");
+        } else if (streamingMode === "webrtc" && webrtcClient) {
+          webrtcClient.setEncodingMethod(encoding);
+          const methodName = encoding === 'binary' ? 'Binary (Fastest)' : 
+                            encoding === 'compressed' ? 'Compressed' : 'Base64';
+          window.AOFVideoStream.showNotification(`Encoding updated to ${methodName}`, "info");
+        }
       }
     });
   }
@@ -132,8 +172,17 @@ function initializeCameraInterface() {
   // Initialize camera devices on load
   refreshCameraDevices();
 
+  // Load available codecs
+  loadAvailableCodecs();
+
+  // Load hardware encoding status
+  loadEncodingStatus();
+
   // Update stream info periodically
   setInterval(updateStreamInfo, 1000);
+  
+  // Update encoding performance periodically
+  setInterval(updateEncodingStatus, 2000);
 }
 
 function refreshCameraDevices() {
@@ -200,6 +249,27 @@ function onCameraSelectionChange() {
   }
 }
 
+function onCodecSelectionChange() {
+  const codecSelect = document.getElementById("codec-select");
+  if (!codecSelect) return;
+
+  const selectedCodec = codecSelect.value;
+  console.log("Codec changed to:", selectedCodec);
+
+  // If streaming is active, update codec in real-time
+  if (streamActive && currentCamera) {
+    updateCodec(selectedCodec);
+  }
+
+  // Update codec status display
+  updateCodecStatus(selectedCodec);
+  
+  // Show notification
+  if (window.AOFVideoStream) {
+    window.AOFVideoStream.showNotification(`Codec changed to ${selectedCodec}`, "info");
+  }
+}
+
 function startStream() {
   const cameraSelect = document.getElementById("camera-select");
   const startBtn = document.getElementById("start-btn");
@@ -209,6 +279,7 @@ function startStream() {
   const resolutionSelect = document.getElementById("resolution-select");
   const fpsSelect = document.getElementById("fps-select");
   const qualitySelect = document.getElementById("quality-select");
+  const codecSelect = document.getElementById("codec-select");
 
   if (!cameraSelect || !cameraSelect.value) {
     if (window.AOFVideoStream) {
@@ -224,6 +295,7 @@ function startStream() {
   let resolution = resolutionSelect ? resolutionSelect.value : "640x480";
   let fps = fpsSelect ? parseInt(fpsSelect.value) : 30;
   let quality = qualitySelect ? getQualityValue(qualitySelect.value) : 85;
+  let codec = codecSelect ? codecSelect.value : "";
 
   // Parse resolution
   const [width, height] = resolution.split("x").map(Number);
@@ -238,6 +310,15 @@ function startStream() {
       resolution: [width, height],
       fps: fps,
       quality: quality,
+      codec: codec,
+    });
+  } else if (streamingMode === "webrtc") {
+    startWebRTCStream({
+      camera_index: parseInt(currentCamera),
+      resolution: [width, height],
+      fps: fps,
+      quality: quality,
+      codec: codec,
     });
   } else {
     startPollingStream({
@@ -245,6 +326,7 @@ function startStream() {
       resolution: [width, height],
       fps: fps,
       quality: quality,
+      codec: codec,
     });
   }
 }
@@ -271,6 +353,42 @@ function startWebSocketStream(settings) {
   // Set up success/error handling via event monitoring
   setTimeout(() => {
     if (wsVideoClient.isStreamingActive()) {
+      handleStreamStartSuccess(settings);
+    }
+  }, 2000);
+}
+
+function startWebRTCStream(settings) {
+  // Connect to WebRTC if not connected and client is available
+  if (!webrtcClient) {
+    handleStreamStartError("WebRTC client not available");
+    return;
+  }
+
+  if (!webrtcClient.isConnectionReady()) {
+    webrtcClient.connect();
+
+    // Wait for connection before starting stream
+    setTimeout(() => {
+      if (webrtcClient.isConnectionReady()) {
+        webrtcClient.startStream(settings);
+        handleStreamStartSuccess(settings);
+        // Show performance stats for WebRTC
+        showPerformanceStats(true);
+      } else {
+        handleStreamStartError("Failed to connect to WebRTC server");
+      }
+    }, 1000);
+  } else {
+    webrtcClient.startStream(settings);
+    handleStreamStartSuccess(settings);
+    // Show performance stats for WebRTC
+    showPerformanceStats(true);
+  }
+
+  // Set up success/error handling via event monitoring
+  setTimeout(() => {
+    if (webrtcClient.isStreamingActive()) {
       handleStreamStartSuccess(settings);
     }
   }, 2000);
@@ -366,6 +484,8 @@ function stopStream() {
 
   if (streamingMode === "websocket") {
     stopWebSocketStream();
+  } else if (streamingMode === "webrtc") {
+    stopWebRTCStream();
   } else {
     stopPollingStream();
   }
@@ -375,6 +495,20 @@ function stopWebSocketStream() {
   if (wsVideoClient) {
     wsVideoClient.stopStream();
   }
+
+  // Handle UI updates
+  setTimeout(() => {
+    handleStreamStopSuccess();
+  }, 500);
+}
+
+function stopWebRTCStream() {
+  if (webrtcClient) {
+    webrtcClient.stopStream();
+  }
+
+  // Hide performance stats
+  showPerformanceStats(false);
 
   // Handle UI updates
   setTimeout(() => {
@@ -572,11 +706,13 @@ function applyStreamSettings() {
   const resolutionSelect = document.getElementById("resolution-select");
   const fpsSelect = document.getElementById("fps-select");
   const qualitySelect = document.getElementById("quality-select");
+  const maxBitrateInput = document.getElementById("max-bitrate-input");
 
-  if (resolutionSelect && fpsSelect && qualitySelect) {
+  if (resolutionSelect && fpsSelect && qualitySelect && maxBitrateInput) {
     const resolution = resolutionSelect.value;
     const fps = fpsSelect.value;
     const quality = qualitySelect.value;
+    const maxBitrate = parseInt(maxBitrateInput.value) || 0;
 
     // Apply resolution to canvas
     if (videoCanvas) {
@@ -589,8 +725,18 @@ function applyStreamSettings() {
     updateStreamResolution(resolution);
     updateStreamFPS(fps);
 
+    // Apply maximum bitrate setting if WebSocket is active
+    if (wsVideoClient && wsVideoClient.isConnected) {
+      wsVideoClient.setMaxBitrate(maxBitrate);
+    }
+
+    let settingsMessage = `Settings applied: ${resolution} @ ${fps}fps (${quality} quality)`;
+    if (maxBitrate > 0) {
+      settingsMessage += `, Max bitrate: ${maxBitrate} kbps`;
+    }
+
     if (window.AOFVideoStream) {
-      window.AOFVideoStream.showNotification(`Settings applied: ${resolution} @ ${fps}fps (${quality} quality)`, "success");
+      window.AOFVideoStream.showNotification(settingsMessage, "success");
     }
   }
 }
@@ -629,33 +775,100 @@ function updateStreamDevice(device) {
   }
 }
 
+function updateCodecStatus(codec) {
+  const codecElement = document.getElementById("stream-codec");
+  if (codecElement) {
+    codecElement.textContent = codec;
+  }
+}
+
+async function updateCodec(codec) {
+  if (!currentCamera) {
+    console.error("No camera selected for codec update");
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/cameras/codec`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ codec: codec }),
+    });
+
+    const result = await response.json();
+    
+    if (response.ok && result.success) {
+      console.log("Codec updated successfully:", result);
+      updateCodecStatus(codec);
+      
+      if (window.AOFVideoStream) {
+        window.AOFVideoStream.showNotification(`Codec updated to ${codec}`, "success");
+      }
+    } else {
+      console.error("Failed to update codec:", result.error);
+      if (window.AOFVideoStream) {
+        window.AOFVideoStream.showNotification(`Failed to update codec: ${result.error?.message || 'Unknown error'}`, "error");
+      }
+    }
+  } catch (error) {
+    console.error("Error updating codec:", error);
+    if (window.AOFVideoStream) {
+      window.AOFVideoStream.showNotification("Error updating codec", "error");
+    }
+  }
+}
+
+async function loadAvailableCodecs() {
+  try {
+    const response = await fetch("/api/cameras/codecs");
+    const result = await response.json();
+    
+    if (response.ok && result.success && result.data.available_codecs) {
+      const codecSelect = document.getElementById("codec-select");
+      if (codecSelect) {
+        // Clear existing options
+        codecSelect.innerHTML = '<option value="">Auto</option>';
+        
+        // Add available codecs
+        Object.entries(result.data.available_codecs).forEach(([category, codecs]) => {
+          if (Array.isArray(codecs)) {
+            codecs.forEach(codec => {
+              const option = document.createElement("option");
+              option.value = codec.fourcc;
+              option.textContent = `${codec.name} (${codec.fourcc})${codec.hardware_accelerated ? ' - HW' : ''}`;
+              codecSelect.appendChild(option);
+            });
+          }
+        });
+        
+        // Select the current codec if available
+        if (result.data.current_codec && result.data.current_codec.fourcc) {
+          codecSelect.value = result.data.current_codec.fourcc;
+          updateCodecStatus(result.data.current_codec.fourcc);
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Error loading available codecs:", error);
+  }
+}
+
 function addStreamingModeToggle() {
-  // Find the camera controls section
-  const cameraControls = document.querySelector(".camera-controls");
-  if (!cameraControls) return;
+  // Use the existing stream-mode-select element from HTML
+  const modeSelect = document.getElementById("stream-mode-select");
+  if (!modeSelect) return;
 
-  // Create streaming mode toggle
-  const modeToggle = document.createElement("div");
-  modeToggle.className = "streaming-mode-toggle";
-  modeToggle.innerHTML = `
-        <label for="streaming-mode" class="mode-label">Streaming Mode:</label>
-        <select id="streaming-mode" class="control-select">
-            <option value="websocket" selected>WebSocket (Low Latency)</option>
-            <option value="polling">HTTP Polling (Compatible)</option>
-        </select>
-    `;
-
-  // Add to camera controls
-  cameraControls.appendChild(modeToggle);
-
-  // Add event listener
-  const modeSelect = document.getElementById("streaming-mode");
+  // Add event listener to the existing select element
   modeSelect.addEventListener("change", function () {
     streamingMode = this.value;
     console.log("Streaming mode changed to:", streamingMode);
 
     if (window.AOFVideoStream) {
-      const modeName = streamingMode === "websocket" ? "WebSocket (Low Latency)" : "HTTP Polling (Compatible)";
+      const modeName = streamingMode === "websocket" ? "WebSocket (Standard)" : 
+                      streamingMode === "webrtc" ? "WebRTC (High Performance)" :
+                      "HTTP Polling (Compatible)";
       window.AOFVideoStream.showNotification(`Switched to ${modeName} mode`, "info");
     }
 
@@ -689,3 +902,168 @@ function updateStreamInfo() {
     // Simulate frame rate calculation or other dynamic info updates
   }
 }
+
+function showPerformanceStats(show) {
+  const performanceStats = document.getElementById('performance-stats');
+  if (performanceStats) {
+    performanceStats.style.display = show ? 'block' : 'none';
+  }
+}
+
+// Update bitrate and quality display
+function updateBitrateDisplay(bitrate, quality) {
+  const bitrateElement = document.getElementById('stream-bitrate');
+  const qualityElement = document.getElementById('stream-quality');
+  
+  if (bitrateElement) {
+    bitrateElement.textContent = `${bitrate.toFixed(2)} Mbps`;
+  }
+  
+  if (qualityElement) {
+    qualityElement.textContent = `${quality}%`;
+  }
+}
+
+// Update performance stats (for WebRTC)
+function updatePerformanceStats(stats) {
+  const chunkRate = document.getElementById('chunk-rate');
+  const bufferSize = document.getElementById('buffer-size');
+  const lostChunks = document.getElementById('lost-chunks');
+  const reassemblyTime = document.getElementById('reassembly-time');
+  
+  if (chunkRate && stats.chunkRate !== undefined) {
+    chunkRate.textContent = `${stats.chunkRate} chunks/s`;
+  }
+  
+  if (bufferSize && stats.bufferSize !== undefined) {
+    bufferSize.textContent = `${(stats.bufferSize / 1024).toFixed(1)} KB`;
+  }
+  
+  if (lostChunks && stats.lostChunks !== undefined) {
+    lostChunks.textContent = stats.lostChunks;
+  }
+  
+  if (reassemblyTime && stats.reassemblyTime !== undefined) {
+    reassemblyTime.textContent = `${stats.reassemblyTime} ms`;
+  }
+}
+
+// Hardware Encoding Functions
+function loadEncodingStatus() {
+  fetch('/api/cameras/encoding/status')
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        const toggle = document.getElementById('hardware-encoding-toggle');
+        if (toggle) {
+          toggle.checked = data.data.hardware_encoding_enabled;
+        }
+        updateEncodingDisplay(data.data.performance);
+      }
+    })
+    .catch(error => {
+      console.error('Error loading encoding status:', error);
+    });
+}
+
+function toggleHardwareEncoding() {
+  const toggle = document.getElementById('hardware-encoding-toggle');
+  const enabled = toggle.checked;
+  
+  const url = enabled ? '/api/cameras/encoding/enable' : '/api/cameras/encoding/disable';
+  
+  // Get current stream settings for encoder initialization
+  const resolution = document.getElementById('resolution-select')?.value || '1920x1080';
+  const fps = parseInt(document.getElementById('fps-select')?.value) || 60;
+  const [width, height] = resolution.split('x').map(Number);
+  
+  const requestData = enabled ? { width, height, fps } : {};
+  
+  fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(requestData)
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      const message = enabled ? 
+        `Hardware encoding enabled (${data.data.performance?.encoding_method || 'Unknown'})` :
+        'Hardware encoding disabled (using software)';
+      
+      if (window.AOFVideoStream) {
+        window.AOFVideoStream.showNotification(message, 'success');
+      }
+      
+      if (data.data.performance) {
+        updateEncodingDisplay(data.data.performance);
+      }
+    } else {
+      if (window.AOFVideoStream) {
+        window.AOFVideoStream.showNotification(data.error.message || 'Failed to toggle hardware encoding', 'error');
+      }
+      // Revert toggle state
+      toggle.checked = !enabled;
+    }
+  })
+  .catch(error => {
+    console.error('Error toggling hardware encoding:', error);
+    if (window.AOFVideoStream) {
+      window.AOFVideoStream.showNotification('Network error while toggling hardware encoding', 'error');
+    }
+    // Revert toggle state
+    toggle.checked = !enabled;
+  });
+}
+
+function updateEncodingStatus() {
+  fetch('/api/cameras/encoding/performance')
+    .then(response => response.json())
+    .then(data => {
+      if (data.success && data.data.performance) {
+        updateEncodingDisplay(data.data.performance);
+      }
+    })
+    .catch(error => {
+      console.debug('Error updating encoding status:', error);
+    });
+}
+
+function updateEncodingDisplay(performance) {
+  const methodElement = document.getElementById('encoding-method');
+  const framesElement = document.getElementById('frames-encoded');
+  const avgTimeElement = document.getElementById('avg-encode-time');
+  const capabilityElement = document.getElementById('encoding-fps-capability');
+  
+  if (methodElement) {
+    const method = performance.encoding_method || 'Unknown';
+    methodElement.textContent = method;
+    
+    // Add color coding
+    if (method.includes('NVENC') || method.includes('QuickSync') || method.includes('VA-API')) {
+      methodElement.className = 'status-value hardware-enabled';
+    } else {
+      methodElement.className = 'status-value hardware-disabled';
+    }
+  }
+  
+  if (framesElement) {
+    framesElement.textContent = performance.frames_encoded || 0;
+  }
+  
+  if (avgTimeElement) {
+    const avgTime = performance.avg_encode_time || 0;
+    avgTimeElement.textContent = `${(avgTime * 1000).toFixed(2)} ms`;
+  }
+  
+  if (capabilityElement) {
+    const capability = performance.fps_capability || 0;
+    capabilityElement.textContent = `${capability.toFixed(1)} FPS`;
+  }
+}
+
+// Make functions available globally for WebRTC client
+window.updateBitrateDisplay = updateBitrateDisplay;
+window.updatePerformanceStats = updatePerformanceStats;

@@ -13,12 +13,24 @@ import logging
 import queue
 from concurrent.futures import ThreadPoolExecutor
 import zlib
+from datetime import datetime
 
 from flask import request
 from flask_socketio import SocketIO, emit, disconnect
 from ..models.camera_model import camera_model
 
 logger = logging.getLogger(__name__)
+
+def serialize_for_json(obj):
+    """Convert datetime and other non-serializable objects to JSON-compatible format."""
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    elif isinstance(obj, dict):
+        return {key: serialize_for_json(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [serialize_for_json(item) for item in obj]
+    else:
+        return obj
 
 class WebSocketVideoStreamer:
     """
@@ -35,6 +47,16 @@ class WebSocketVideoStreamer:
         # Frame queues for async processing
         self.frame_queues: Dict[str, queue.Queue] = {}
         self.setup_handlers()
+    
+    def safe_emit(self, event, data, **kwargs):
+        """Safely emit data with error handling for disconnected clients."""
+        try:
+            emit(event, data, **kwargs)
+            return True
+        except Exception as e:
+            # Log the error but don't raise it - client might have disconnected
+            logger.warning(f"Failed to emit {event}: {e}")
+            return False
     
     def setup_handlers(self):
         """Setup WebSocket event handlers."""
@@ -58,9 +80,20 @@ class WebSocketVideoStreamer:
                 'performance_stats': {
                     'avg_encode_time': 0,
                     'avg_frame_size': 0,
-                    'frames_skipped': 0
+                    'frames_skipped': 0,
+                    'total_bytes_sent': 0,
+                    'bitrate_window_start': time.time(),
+                    'bitrate_window_bytes': 0,
+                    'current_bitrate_mbps': 0
                 },
-                'encoding_method': 'binary'  # binary, base64, compressed
+                'encoding_method': 'binary',  # binary, base64, compressed
+                'max_bitrate_kbps': 0,  # 0 = unlimited, otherwise limit in kbps
+                'bitrate_control': {
+                    'enabled': False,
+                    'target_kbps': 0,
+                    'quality_adjustment': 0,  # -50 to +50 quality adjustment
+                    'last_adjustment_time': 0
+                }
             }
             
             emit('connection_status', {
@@ -75,12 +108,8 @@ class WebSocketVideoStreamer:
             client_id = request.sid
             logger.info(f"Video client disconnected: {client_id}")
             
-            # Stop streaming for this client
-            self.stop_stream_for_client(client_id)
-            
-            # Clean up connection data
-            if client_id in self.active_connections:
-                del self.active_connections[client_id]
+            # Stop streaming for this client and clean up completely
+            self.stop_stream_for_client(client_id, disconnect_client=True)
         
         @self.socketio.on('start_stream', namespace='/video')
         def handle_start_stream(data):
@@ -141,11 +170,16 @@ class WebSocketVideoStreamer:
             client_id = request.sid
             logger.info(f"Stopping WebSocket stream for client {client_id}")
             
-            self.stop_stream_for_client(client_id)
+            # Stop streaming but keep client connected for potential restart
+            self.stop_stream_for_client(client_id, disconnect_client=False)
             
-            emit('stream_stopped', {
-                'timestamp': time.time()
-            })
+            # Send stopped confirmation
+            try:
+                emit('stream_stopped', {
+                    'timestamp': time.time()
+                })
+            except Exception as e:
+                logger.warning(f"Error emitting stream_stopped to client {client_id}: {e}")
 
         @self.socketio.on('update_resolution', namespace='/video')
         def handle_update_resolution(data):
@@ -231,12 +265,45 @@ class WebSocketVideoStreamer:
                     'timestamp': time.time()
                 })
         
+        @self.socketio.on('set_max_bitrate', namespace='/video')
+        def handle_set_max_bitrate(data):
+            """Handle maximum bitrate setting."""
+            client_id = request.sid
+            max_bitrate_kbps = data.get('max_bitrate_kbps', 0)  # 0 = unlimited
+            
+            if client_id in self.active_connections:
+                conn_data = self.active_connections[client_id]
+                conn_data['max_bitrate_kbps'] = max_bitrate_kbps
+                
+                # Configure bitrate control
+                if max_bitrate_kbps > 0:
+                    conn_data['bitrate_control']['enabled'] = True
+                    conn_data['bitrate_control']['target_kbps'] = max_bitrate_kbps
+                    conn_data['bitrate_control']['quality_adjustment'] = 0
+                    conn_data['bitrate_control']['last_adjustment_time'] = time.time()
+                else:
+                    conn_data['bitrate_control']['enabled'] = False
+                    conn_data['bitrate_control']['quality_adjustment'] = 0
+                
+                logger.info(f"Updated max bitrate for client {client_id}: {max_bitrate_kbps} kbps")
+                
+                emit('max_bitrate_updated', {
+                    'max_bitrate_kbps': max_bitrate_kbps,
+                    'enabled': conn_data['bitrate_control']['enabled'],
+                    'timestamp': time.time()
+                })
+        
         @self.socketio.on('get_stats', namespace='/video')
         def handle_get_stats():
             """Handle statistics request."""
             client_id = request.sid
             
-            if client_id in self.active_connections:
+            # Check if client is still connected and has active connection data
+            if client_id not in self.active_connections:
+                logger.warning(f"Stats requested for disconnected client: {client_id}")
+                return
+                
+            try:
                 conn_data = self.active_connections[client_id]
                 camera_status = camera_model.get_status()
                 
@@ -245,19 +312,29 @@ class WebSocketVideoStreamer:
                     'streaming': conn_data['streaming'],
                     'frame_count': conn_data['frame_count'],
                     'connection_time': time.time() - conn_data['connection_time'],
-                    'camera_status': camera_status,
+                    'camera_status': serialize_for_json(camera_status),
                     'performance_stats': conn_data.get('performance_stats', {}),
                     'timestamp': time.time()
                 }
                 
                 emit('stream_stats', stats)
+            except Exception as e:
+                logger.error(f"Error handling stats request for client {client_id}: {e}")
+                # Clean up potentially corrupted connection data
+                if client_id in self.active_connections:
+                    del self.active_connections[client_id]
         
         @self.socketio.on('get_performance_stats', namespace='/video')
         def handle_get_performance_stats():
             """Handle performance statistics request."""
             client_id = request.sid
             
-            if client_id in self.active_connections:
+            # Check if client is still connected and has active connection data
+            if client_id not in self.active_connections:
+                logger.warning(f"Performance stats requested for disconnected client: {client_id}")
+                return
+                
+            try:
                 conn_data = self.active_connections[client_id]
                 perf_stats = conn_data.get('performance_stats', {})
                 
@@ -268,6 +345,11 @@ class WebSocketVideoStreamer:
                     'frames_skipped': perf_stats.get('frames_skipped', 0),
                     'timestamp': time.time()
                 })
+            except Exception as e:
+                logger.error(f"Error handling performance stats request for client {client_id}: {e}")
+                # Clean up potentially corrupted connection data
+                if client_id in self.active_connections:
+                    del self.active_connections[client_id]
     
     def start_stream_for_client(self, client_id: str):
         """Start streaming thread for a specific client."""
@@ -287,8 +369,8 @@ class WebSocketVideoStreamer:
         
         logger.info(f"Started streaming thread for client {client_id}")
     
-    def stop_stream_for_client(self, client_id: str):
-        """Stop streaming for a specific client."""
+    def stop_stream_for_client(self, client_id: str, disconnect_client: bool = False):
+        """Stop streaming for a specific client and optionally disconnect them."""
         # Mark as not streaming
         if client_id in self.active_connections:
             self.active_connections[client_id]['streaming'] = False
@@ -301,7 +383,47 @@ class WebSocketVideoStreamer:
                 thread.join(timeout=1.0)
             del self.streaming_threads[client_id]
         
-        logger.info(f"Stopped streaming for client {client_id}")
+        # Release camera and deinitialize if no other clients are streaming
+        try:
+            # Check if any other clients are still streaming
+            other_clients_streaming = any(
+                conn['streaming'] for cid, conn in self.active_connections.items() 
+                if cid != client_id
+            )
+            
+            if not other_clients_streaming:
+                # No other clients streaming, safe to release camera
+                camera_status = camera_model.get_status()
+                if camera_status['is_active']:
+                    logger.info("Stopping camera stream - no active clients")
+                    camera_model.stop_stream()
+                    camera_model.cleanup()
+                    logger.info("Camera stopped and cleaned up")
+                else:
+                    logger.info("Camera already inactive")
+            else:
+                logger.info(f"Camera remains active - {sum(1 for conn in self.active_connections.values() if conn.get('streaming', False))} other clients streaming")
+                
+        except Exception as e:
+            logger.error(f"Error releasing camera for client {client_id}: {e}")
+        
+        # Only disconnect client if explicitly requested (e.g., for cleanup scenarios)
+        if disconnect_client:
+            # Notify client that stream is being stopped
+            try:
+                self.socketio.emit('stream_force_stop', {
+                    'reason': 'Stream stopped by server',
+                    'timestamp': time.time()
+                }, namespace='/video', room=client_id)
+                logger.info(f"Notified client {client_id} of stream stop")
+            except Exception as e:
+                logger.warning(f"Error notifying client {client_id}: {e}")
+            
+            # Clean up connection data for disconnected clients
+            if client_id in self.active_connections:
+                del self.active_connections[client_id]
+        
+        logger.info(f"Stopped streaming for client {client_id} (disconnect: {disconnect_client})")
     
     def _encode_frame_fast(self, frame_data: bytes, method: str) -> tuple:
         """Fast encoding methods for frame data."""
@@ -325,6 +447,61 @@ class WebSocketVideoStreamer:
             encoded_data = base64.b64encode(frame_data).decode('utf-8')
             encode_time = time.time() - encode_start
             return encoded_data, encode_time, 'base64'
+    
+    def _adjust_quality_for_bitrate(self, client_id: str, current_bitrate_kbps: float, target_kbps: int) -> int:
+        """Adjust quality based on current vs target bitrate."""
+        if client_id not in self.active_connections:
+            return 85  # Default quality
+        
+        conn_data = self.active_connections[client_id]
+        bitrate_control = conn_data['bitrate_control']
+        current_time = time.time()
+        
+        # Only adjust every 2 seconds to avoid oscillation
+        if current_time - bitrate_control['last_adjustment_time'] < 2.0:
+            return conn_data['quality']
+        
+        base_quality = 85  # Base quality without adjustments
+        current_adjustment = bitrate_control['quality_adjustment']
+        
+        # Calculate bitrate difference
+        bitrate_diff_percent = ((current_bitrate_kbps - target_kbps) / target_kbps) * 100
+        
+        # Adjust quality based on bitrate difference
+        if bitrate_diff_percent > 20:  # 20% over target
+            # Reduce quality more aggressively
+            adjustment_change = -10
+        elif bitrate_diff_percent > 10:  # 10% over target
+            # Reduce quality moderately
+            adjustment_change = -5
+        elif bitrate_diff_percent < -20:  # 20% under target
+            # Increase quality more aggressively
+            adjustment_change = 10
+        elif bitrate_diff_percent < -10:  # 10% under target
+            # Increase quality moderately
+            adjustment_change = 5
+        else:
+            # Within acceptable range, small adjustment towards optimal
+            if bitrate_diff_percent > 5:
+                adjustment_change = -2
+            elif bitrate_diff_percent < -5:
+                adjustment_change = 2
+            else:
+                adjustment_change = 0
+        
+        # Apply adjustment with limits
+        new_adjustment = max(-50, min(50, current_adjustment + adjustment_change))
+        adjusted_quality = max(20, min(95, base_quality + new_adjustment))
+        
+        # Update adjustment tracking
+        bitrate_control['quality_adjustment'] = new_adjustment
+        bitrate_control['last_adjustment_time'] = current_time
+        
+        if adjustment_change != 0:
+            logger.info(f"Bitrate control for client {client_id}: {current_bitrate_kbps:.1f}kbps -> target {target_kbps}kbps, "
+                       f"quality {conn_data['quality']} -> {adjusted_quality} (adj: {new_adjustment})")
+        
+        return adjusted_quality
     
     def _stream_worker(self, client_id: str):
         """Worker thread for streaming video frames to a specific client."""
@@ -357,13 +534,21 @@ class WebSocketVideoStreamer:
                     time.sleep(0.001)  # Short sleep to prevent busy waiting
                     continue
                 
-                # Use user-specified quality (no adaptive changes)
+                # Use user-specified quality with bitrate control
                 encode_start = time.time()
-                user_quality = conn_data['quality']
+                base_quality = conn_data['quality']
                 encoding_method = conn_data.get('encoding_method', 'binary')
                 
-                # Get frame from camera with user-specified quality
-                frame_data = camera_model.get_frame_as_jpeg(quality=user_quality)
+                # Apply bitrate control if enabled
+                effective_quality = base_quality
+                if conn_data['bitrate_control']['enabled'] and conn_data['performance_stats']['current_bitrate_mbps'] > 0:
+                    current_bitrate_kbps = conn_data['performance_stats']['current_bitrate_mbps'] * 1000
+                    target_kbps = conn_data['bitrate_control']['target_kbps']
+                    effective_quality = self._adjust_quality_for_bitrate(client_id, current_bitrate_kbps, target_kbps)
+
+                self.active_connections[client_id]['quality'] = effective_quality
+                # Get frame from camera with calculated quality
+                frame_data = camera_model.get_frame_as_jpeg(quality=effective_quality)
                 
                 if frame_data:
                     # Get frame size
@@ -387,10 +572,12 @@ class WebSocketVideoStreamer:
                             self.socketio.emit('video_frame_binary', {
                                 'timestamp': current_time,
                                 'frame_count': conn_data['frame_count'],
-                                'quality': user_quality,
+                                'quality': effective_quality,
+                                'base_quality': base_quality,
                                 'frame_size': current_frame_size,
                                 'encode_time': encode_time,
-                                'encoding': actual_method
+                                'encoding': actual_method,
+                                'bitrate_control': conn_data['bitrate_control']['enabled']
                             }, namespace='/video', room=client_id)
                             # Send binary data separately
                             self.socketio.emit('frame_data', encoded_data, namespace='/video', room=client_id)
@@ -400,10 +587,12 @@ class WebSocketVideoStreamer:
                                 'frame': encoded_data,
                                 'timestamp': current_time,
                                 'frame_count': conn_data['frame_count'],
-                                'quality': user_quality,
+                                'quality': effective_quality,
+                                'base_quality': base_quality,
                                 'frame_size': current_frame_size,
                                 'encode_time': encode_time,
-                                'encoding': actual_method
+                                'encoding': actual_method,
+                                'bitrate_control': conn_data['bitrate_control']['enabled']
                             }, namespace='/video', room=client_id)
                         
                         # Update connection data
@@ -414,6 +603,21 @@ class WebSocketVideoStreamer:
                         
                         # Update performance statistics
                         perf_stats = conn_data['performance_stats']
+                        
+                        # Update total bytes sent
+                        perf_stats['total_bytes_sent'] += current_frame_size
+                        perf_stats['bitrate_window_bytes'] += current_frame_size
+                        
+                        # Calculate bitrate every second
+                        bitrate_window_duration = current_time - perf_stats['bitrate_window_start']
+                        if bitrate_window_duration >= 1.0:  # Calculate bitrate every second
+                            # Calculate bitrate in Mbps
+                            bits_per_second = (perf_stats['bitrate_window_bytes'] * 8) / bitrate_window_duration
+                            perf_stats['current_bitrate_mbps'] = bits_per_second / 1_000_000  # Convert to Mbps
+                            
+                            # Reset bitrate window
+                            perf_stats['bitrate_window_start'] = current_time
+                            perf_stats['bitrate_window_bytes'] = 0
                         
                         # Running average of encode time
                         if perf_stats['avg_encode_time'] == 0:
@@ -467,13 +671,22 @@ class WebSocketVideoStreamer:
         }
         
         for client_id, conn_data in self.active_connections.items():
+            perf_stats = conn_data.get('performance_stats', {})
+            bitrate_control = conn_data.get('bitrate_control', {})
             stats['connections'][client_id] = {
                 'streaming': conn_data['streaming'],
                 'frame_count': conn_data['frame_count'],
                 'connection_time': time.time() - conn_data['connection_time'],
                 'camera_index': conn_data.get('camera_index'),
                 'quality': conn_data.get('quality'),
-                'target_fps': conn_data.get('target_fps')
+                'target_fps': conn_data.get('target_fps'),
+                'current_bitrate_mbps': perf_stats.get('current_bitrate_mbps', 0),
+                'total_bytes_sent': perf_stats.get('total_bytes_sent', 0),
+                'avg_frame_size': perf_stats.get('avg_frame_size', 0),
+                'encoding_method': conn_data.get('encoding_method', 'binary'),
+                'max_bitrate_kbps': conn_data.get('max_bitrate_kbps', 0),
+                'bitrate_control_enabled': bitrate_control.get('enabled', False),
+                'quality_adjustment': bitrate_control.get('quality_adjustment', 0)
             }
         
         return stats

@@ -10,6 +10,7 @@ from typing import Type, Tuple
 from .config import BaseConfig
 from .controllers import register_blueprints
 from .controllers.websocket_controller import init_websocket_streaming
+from .controllers.webrtc_controller import init_webrtc_streaming
 from .models import init_models
 from .views import register_template_filters, register_template_globals
 
@@ -40,7 +41,7 @@ def create_app(config: Type[BaseConfig]) -> Tuple[Flask, SocketIO]:
         app,
         cors_allowed_origins="*",
         async_mode='threading',
-        logger=app.config.get('DEBUG', False),
+        logger= False, #app.config.get('DEBUG', False),
         engineio_logger= False #app.config.get('DEBUG', False)
     )
     
@@ -50,6 +51,9 @@ def create_app(config: Type[BaseConfig]) -> Tuple[Flask, SocketIO]:
     
     # Initialize WebSocket streaming
     init_websocket_streaming(socketio)
+    
+    # Initialize WebRTC streaming  
+    init_webrtc_streaming(socketio)
     
     # Register template utilities
     register_template_filters(app)
