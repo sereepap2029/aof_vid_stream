@@ -2,7 +2,25 @@
 
 ## System Architecture Overview
 
-This document outlines the architecture for the AOF Video Stream project, which captures video from camera devices and displays it in a web application running on localhost.
+This document outlines the architecture for the AOF Video Stream project, which captures video from camera devices and displays it └── controllers/           # ✅ Controllers (C in MVC)
+├── static/                # ✅ Static web assets (enhanced)
+    ├── css/
+    │   └── style.css      # ✅ Enhanced application styles with new component support
+    └── js/
+        ├── camera.js      # ✅ Enhanced camera control logic with hardware settings
+        ├── websocket-video.js # ✅ Enhanced WebSocket client with binary frame support
+        ├── webrtc-video.js    # ✅ NEW: WebRTC streaming client with frame chunking
+        └── main.js        # ✅ Common application utilities─ __init__.py        # ✅ Blueprint registration
+    ├── main_controller.py # ✅ Main web routes
+    ├── camera_controller.py # ✅ Camera operations API (enhanced)
+    ├── websocket_controller.py # ✅ Enhanced WebSocket streaming with hardware support
+    ├── webrtc_controller.py    # ✅ NEW: WebRTC frame chunking controller
+    ├── api_controller.py  # ✅ Legacy API compatibility layer
+    └── api/               # ✅ Modular API structure
+        ├── __init__.py    # ✅ API package with blueprint registration
+        ├── cameras_api.py # ✅ Camera-specific API endpoints (enhanced)
+        ├── streams_api.py # ✅ Streaming session management
+        └── system_api.py  # ✅ System-specific API endpoints application running on localhost.
 
 ## Implementation Status
 
@@ -50,7 +68,7 @@ This document outlines the architecture for the AOF Video Stream project, which 
 - ✅ **Frame capture API serving JPEG images**
 - ✅ **Complete camera controls (start/stop/settings/snapshot/fullscreen)**
 
-### ✅ Phase 3: Streaming Implementation (COMPLETED + ENHANCED)
+### ✅ Phase 3: Streaming Implementation (COMPLETED + ENHANCED WITH HARDWARE ACCELERATION)
 - ✅ Real-time video streaming server
 - ✅ HTTP-based frame delivery (JPEG format)
 - ✅ Canvas-based frame rendering in browser
@@ -66,12 +84,23 @@ This document outlines the architecture for the AOF Video Stream project, which 
 - ✅ **Multiple encoding methods (Binary/Base64/Compressed) with runtime switching**
 - ✅ **Enhanced performance optimization with real-time metrics**
 - ✅ **Smart frame management and adaptive threading**
+- ✅ **NEW**: Hardware acceleration with NVENC and Intel Quick Sync support
+- ✅ **NEW**: WebRTC streaming with frame chunking for high-resolution support
+- ✅ **NEW**: Multi-codec support (H.264, H.265, VP8, VP9, AV1)
+- ✅ **NEW**: OpenH264 library integration with cross-platform support
+- ✅ **NEW**: 60 FPS high-resolution streaming capabilities (up to 1080p+)
+- ✅ **NEW**: Frame chunking system for reliable large frame transmission
 
-### 🎨 Phase 4: Enhancement (FUTURE)
-- Recording capabilities
-- Advanced camera controls
-- Multi-stream support
-- Performance monitoring
+### 🎨 Phase 4: Enhancement (ENHANCED + HARDWARE ACCELERATION)
+- ✅ Hardware-accelerated encoding capabilities (NVENC, Quick Sync, VA-API)
+- ✅ Multi-codec support with automatic detection and validation
+- ✅ WebRTC streaming with frame chunking for high-resolution support
+- ✅ Advanced performance monitoring with encoding time metrics
+- ✅ OpenH264 library integration for cross-platform H.264 support
+- [ ] Recording capabilities with hardware acceleration
+- [ ] Advanced camera controls with hardware-specific settings
+- [ ] Multi-stream support with concurrent hardware encoding
+- [ ] Performance monitoring dashboard with hardware metrics
 
 ## High-Level Architecture
 
@@ -94,6 +123,7 @@ Camera Layer
 ├── camera_manager.py      # Main camera management ✅ COMPLETED
 ├── device_detector.py     # Camera device detection ✅ COMPLETED
 ├── video_capture.py       # Video capture handling ✅ COMPLETED
+├── hardware_encoder.py    # ✅ NEW: Hardware acceleration support
 └── frame_processor.py     # Frame processing utilities (planned)
 ```
 
@@ -103,6 +133,9 @@ Camera Layer
 - Capture video frames ✅ IMPLEMENTED
 - Handle camera-specific configurations ✅ IMPLEMENTED
 - Process raw video frames (basic implementation)
+- ✅ **NEW**: Hardware-accelerated video encoding (NVENC, Quick Sync, VA-API)
+- ✅ **NEW**: Multi-codec support with automatic detection
+- ✅ **NEW**: OpenH264 integration for cross-platform H.264 support
 
 **Key Classes**:
 - `CameraManager`: Central management of camera operations ✅ IMPLEMENTED
@@ -117,19 +150,37 @@ Camera Layer
   - Real-time frame capture with threading
   - Configurable resolution and FPS
   - Continuous capture with buffer management
+- ✅ **NEW**: `HardwareEncoder`: Hardware-accelerated video encoding
+  - NVENC, Intel Quick Sync, VA-API detection and utilization
+  - Multi-codec support (H.264, H.265, VP8, VP9, AV1)
+  - OpenH264 library management and integration
+  - Performance optimization with hardware acceleration
 - `FrameProcessor`: Process and optimize video frames (planned for Phase 3)
 
-### 2. Streaming Layer ✅ ENHANCED WITH WEBSOCKET + PERFORMANCE OPTIMIZATION
+### 2. Streaming Layer ✅ ENHANCED WITH WEBSOCKET + WEBRTC + HARDWARE ACCELERATION
 **Location**: `src/streaming/` (implemented within existing architecture)
 
 ```
-Streaming Layer (Optimized Multi-Mode Implementation)
-├── WebSocket Server              # ✅ Socket.IO with enhanced threading support  
+Streaming Layer (Enhanced Multi-Mode Implementation with Hardware Support)
+├── WebSocket Server              # ✅ Socket.IO with enhanced threading + hardware encoding  
 │   ├── Real-time frame streaming # ✅ Binary JPEG frames (default) + Base64/Compressed
 │   ├── Connection management     # ✅ Multi-client support with performance tracking
 │   ├── Quality control          # ✅ Runtime quality/FPS adjustment (manual control)
 │   ├── Performance monitoring   # ✅ FPS/latency/encoding metrics
+│   ├── Hardware acceleration    # ✅ NVENC/Quick Sync integration
 │   └── Encoding method selection# ✅ Runtime switching between Binary/Base64/Compressed
+├── WebRTC Server                # ✅ NEW: Frame chunking for high-resolution streaming
+│   ├── Frame chunking system    # ✅ 32KB chunks for reliable large frame transmission
+│   ├── High-resolution support  # ✅ Optimized for 1080p+ streaming
+│   ├── 60 FPS capability        # ✅ High framerate support
+│   ├── Chunk reassembly         # ✅ Intelligent frame reconstruction
+│   └── Performance metrics      # ✅ Chunking and reassembly statistics
+├── Hardware Encoding Layer     # ✅ NEW: Hardware acceleration integration
+│   ├── NVENC encoder           # ✅ NVIDIA hardware encoding
+│   ├── Quick Sync encoder      # ✅ Intel hardware encoding
+│   ├── VA-API encoder          # ✅ Linux hardware encoding support
+│   ├── Multi-codec support     # ✅ H.264, H.265, VP8, VP9, AV1
+│   └── OpenH264 integration    # ✅ Cross-platform H.264 support
 ├── HTTP Frame Server            # ✅ /api/cameras/frame endpoint (fallback)
 ├── Multi-Format Encoding        # ✅ Binary (default), Base64, zlib compression
 ├── JavaScript Enhanced Client   # ✅ Binary frame handling + performance monitoring
@@ -140,6 +191,8 @@ Streaming Layer (Optimized Multi-Mode Implementation)
 
 **Responsibilities**:
 - ✅ Binary WebSocket streaming for ultra-low latency (< 20ms with binary)
+- ✅ WebRTC streaming with frame chunking for high-resolution support
+- ✅ Hardware-accelerated encoding with NVENC and Quick Sync
 - ✅ HTTP polling fallback for compatibility
 - ✅ Real-time quality and FPS adjustments (manual control)
 - ✅ Multi-client connection management with performance tracking
@@ -147,14 +200,18 @@ Streaming Layer (Optimized Multi-Mode Implementation)
 - ✅ Automatic reconnection and error handling
 - ✅ Runtime encoding method switching without stream interruption
 - ✅ Smart frame management and adaptive threading optimization
+- ✅ Frame chunking for reliable large frame transmission
 
 **Key Components**:
-- ✅ `WebSocketVideoStreamer`: Enhanced multi-threaded WebSocket server with performance optimization
+- ✅ `WebSocketVideoStreamer`: Enhanced multi-threaded WebSocket server with hardware acceleration
+- ✅ `WebRTCVideoStreamer`: Frame chunking system for high-resolution streaming
+- ✅ `HardwareEncoder`: NVENC, Quick Sync, and OpenH264 integration
 - ✅ `Socket.IO Integration`: Real-time bidirectional communication with binary frame support
-- ✅ `Multi-Mode Client`: JavaScript client supporting WebSocket/HTTP + Binary/Base64/Compressed modes
+- ✅ `Multi-Mode Client`: JavaScript client supporting WebSocket/WebRTC + Binary/Base64/Compressed modes
 - ✅ `Performance Monitor`: Real-time FPS, latency, encoding time, and frame size metrics
 - ✅ `Binary Frame Handler`: Direct JPEG binary transmission with 95% performance improvement
-- ✅ `Encoding Manager`: Runtime switching between encoding methods with fallback support
+- ✅ `Frame Chunker`: Splits large frames into 32KB chunks with reassembly support
+- ✅ `Encoding Manager`: Runtime switching between encoding methods with hardware fallback support
 
 ### 3. Web Application Layer ✅ IMPLEMENTED
 **Location**: `src/webapp/`
@@ -269,34 +326,48 @@ User Input → JavaScript → API Request → Backend Processing → Response
 
 ## Technical Stack
 
-### Backend Technologies ✅ IMPLEMENTED
-- **Framework**: Flask ✅ IMPLEMENTED with MVC architecture
-- **Video Processing**: OpenCV (cv2) ✅ IMPLEMENTED
+### Backend Technologies ✅ IMPLEMENTED + ENHANCED
+- **Framework**: Flask ✅ IMPLEMENTED with MVC architecture + Socket.IO integration
+- **Video Processing**: OpenCV (cv2) ✅ IMPLEMENTED + Hardware acceleration support
+- **Hardware Encoding**: NVENC, Intel Quick Sync, VA-API ✅ IMPLEMENTED
+- **Multi-Codec Support**: H.264, H.265, VP8, VP9, AV1 ✅ IMPLEMENTED
+- **Real-time Communication**: WebSockets (Socket.IO) ✅ IMPLEMENTED
+- **WebRTC Support**: Frame chunking for high-resolution streaming ✅ IMPLEMENTED
 - **Configuration Management**: Environment-based configs ✅ IMPLEMENTED
 - **REST API**: Comprehensive API endpoints ✅ IMPLEMENTED
 - **Template Engine**: Jinja2 with custom filters ✅ IMPLEMENTED
-- **Real-time Communication**: WebSockets (planned for Phase 3)
-- **Async Processing**: asyncio (for async frameworks, planned)
+- **OpenH264 Integration**: Cross-platform H.264 library support ✅ IMPLEMENTED
+- **Performance Optimization**: Binary transmission, threading, hardware acceleration ✅ IMPLEMENTED
 - **Image Processing**: Pillow, NumPy ✅ INSTALLED
 
-### Frontend Technologies ✅ IMPLEMENTED
+### Frontend Technologies ✅ IMPLEMENTED + ENHANCED
 - **HTML5**: Complete template system with inheritance ✅ IMPLEMENTED
-- **CSS3**: Responsive design with animations ✅ IMPLEMENTED
-- **JavaScript**: Camera controls and UI interactions ✅ IMPLEMENTED
+- **CSS3**: Responsive design with animations ✅ IMPLEMENTED + Enhanced styling
+- **JavaScript**: Camera controls and UI interactions ✅ IMPLEMENTED + Enhanced features
 - **Canvas API**: Real-time video rendering ✅ IMPLEMENTED
+- **WebSocket Client**: Socket.IO with binary frame support ✅ IMPLEMENTED
+- **WebRTC Client**: Frame chunking and high-resolution support ✅ IMPLEMENTED
 - **Template System**: Jinja2 with custom filters ✅ IMPLEMENTED
-- **Video Streaming**: HTTP polling-based streaming ✅ IMPLEMENTED
-- **Frame Display**: 30 FPS Canvas rendering ✅ IMPLEMENTED
+- **Video Streaming**: Multi-mode streaming (WebSocket/WebRTC/HTTP) ✅ IMPLEMENTED
+- **Frame Display**: 30-60 FPS Canvas rendering with performance optimization ✅ IMPLEMENTED
+- **Performance Monitoring**: Real-time FPS, latency, and encoding metrics ✅ IMPLEMENTED
 
-### Supporting Technologies ✅ IMPLEMENTED
+### Supporting Technologies ✅ IMPLEMENTED + ENHANCED
 - **Camera Access**: OpenCV VideoCapture ✅ WORKING
+- **Hardware Acceleration**: NVENC, Intel Quick Sync, VA-API ✅ IMPLEMENTED
+- **Multi-Codec Support**: H.264, H.265, VP8, VP9, AV1 ✅ IMPLEMENTED
+- **OpenH264 Libraries**: Cross-platform H.264 encoding ✅ INTEGRATED
 - **Image Encoding**: JPEG compression with quality control ✅ AVAILABLE
+- **Binary Transmission**: WebSocket binary frame support ✅ IMPLEMENTED
+- **Frame Chunking**: Large frame splitting and reassembly ✅ IMPLEMENTED
 - **HTTP Server**: Flask development server ✅ RUNNING
+- **Socket.IO Server**: Real-time WebSocket communication ✅ RUNNING
 - **Configuration**: Environment-based settings ✅ IMPLEMENTED
 - **Error Handling**: Custom error pages ✅ IMPLEMENTED
-- **Video Streaming**: HTTP-based frame polling ✅ IMPLEMENTED
-- **Real-time Display**: Canvas-based rendering ✅ WORKING
+- **Video Streaming**: Multi-mode streaming (WebSocket/WebRTC/HTTP) ✅ IMPLEMENTED
+- **Real-time Display**: Canvas-based rendering with performance optimization ✅ WORKING
 - **Development Server**: Flask with auto-reload ✅ WORKING
+- **Performance Monitoring**: Real-time metrics and statistics ✅ IMPLEMENTED
 
 ## Database Architecture (Future)
 ```
@@ -526,7 +597,65 @@ aof_vid_stream/
 - Performance monitoring
 - Resource optimization
 
-This architecture provides a solid foundation for the video streaming application while maintaining flexibility for future enhancements and scalability.
+## Hardware Acceleration Architecture (August 2025)
+
+### Hardware Encoding Integration
+The system now includes comprehensive hardware acceleration support for video encoding, significantly improving performance and reducing CPU usage.
+
+#### Supported Hardware Encoders
+- **NVIDIA NVENC**: Hardware H.264/H.265 encoding on NVIDIA GPUs
+- **Intel Quick Sync**: Hardware video encoding on Intel CPUs with integrated graphics
+- **VA-API**: Video Acceleration API support for Linux systems
+- **CUDA**: GPU-accelerated video processing capabilities
+
+#### Hardware Detection System
+```python
+class HardwareCapabilities:
+    - Automatic detection of available hardware encoders
+    - CUDA device enumeration and capability assessment
+    - Codec availability testing and validation
+    - Performance benchmarking for optimal codec selection
+    - Cross-platform hardware support detection
+```
+
+#### Multi-Codec Support
+The system supports multiple video codecs with hardware acceleration:
+- **H.264**: Primary codec with NVENC/Quick Sync/OpenH264 support
+- **H.265 (HEVC)**: Advanced compression with hardware acceleration
+- **VP8/VP9**: WebM format support for web streaming
+- **AV1**: Next-generation codec support (software encoding)
+
+#### OpenH264 Integration
+- **Cross-Platform Support**: Integrated OpenH264 libraries for universal H.264 support
+- **Dynamic Loading**: Automatic detection and loading of OpenH264 DLLs
+- **Version Management**: Support for multiple OpenH264 versions (1.8.0, 2.1.1)
+- **Compressed Storage**: Efficient library storage with bzip2 compression
+
+### WebRTC Frame Chunking Architecture
+Enhanced streaming capability for high-resolution video transmission.
+
+#### Frame Chunking System
+```python
+class FrameChunker:
+    - Splits large frames into 32KB chunks for reliable transmission
+    - Frame reassembly with timeout handling
+    - Chunk loss detection and recovery
+    - Performance metrics for chunking operations
+```
+
+#### High-Resolution Support
+- **1080p+ Streaming**: Optimized for Full HD and higher resolutions
+- **60 FPS Capability**: High framerate support with frame chunking
+- **Large Frame Handling**: Efficient transmission of frames up to several MB
+- **Adaptive Chunking**: Dynamic chunk size based on frame size and network conditions
+
+#### WebRTC Controller Features
+- **Chunk Cache Management**: Intelligent caching of frame chunks
+- **Timeout Handling**: Automatic cleanup of incomplete frames
+- **Performance Monitoring**: Real-time chunking and reassembly statistics
+- **Error Recovery**: Robust handling of missing or corrupted chunks
+
+This architecture provides a solid foundation for high-performance video streaming while maintaining flexibility for future enhancements and scalability across different hardware configurations.
 
 ## Performance Optimization Implementation (August 2025)
 
@@ -643,20 +772,42 @@ handleBinaryFrame(arrayBuffer) {
 
 ## Recent Updates (August 2025)
 
-### Phase 2 Enhancements Completed
+### Phase 2 & 3 Enhancements Completed
 - ✅ **Documentation System**: Added comprehensive About and Help pages
 - ✅ **Navigation Enhancement**: Enhanced base template with complete navigation system
 - ✅ **User Experience**: Improved user guidance with troubleshooting and API documentation
 - ✅ **CSS Styling**: Extended styles to support documentation pages with responsive design
 - ✅ **Content Management**: Structured help content with categorized sections
+- ✅ **Hardware Encoding**: Complete NVENC, Intel Quick Sync, and VA-API support
+- ✅ **WebRTC Streaming**: Frame chunking system for high-resolution support
+- ✅ **Multi-Codec Support**: H.264, H.265, VP8, VP9, AV1 codec integration
+- ✅ **OpenH264 Integration**: Cross-platform H.264 library support
+- ✅ **60 FPS Streaming**: High framerate support up to 1080p resolution
+
+### Hardware Acceleration Features
+- ✅ **NVIDIA NVENC**: Hardware-accelerated H.264/H.265 encoding
+- ✅ **Intel Quick Sync**: Hardware video encoding for Intel GPUs
+- ✅ **CUDA Integration**: GPU-accelerated video processing capabilities
+- ✅ **Automatic Detection**: Hardware capability detection and validation
+- ✅ **Codec Testing**: Comprehensive codec availability testing
+- ✅ **Performance Optimization**: Hardware encoding for reduced CPU usage
+
+### WebRTC and Frame Chunking
+- ✅ **Frame Chunking**: 32KB chunk system for reliable large frame transmission
+- ✅ **High Resolution Support**: Optimized for 1080p+ streaming
+- ✅ **60 FPS Capability**: High framerate streaming support
+- ✅ **Chunk Reassembly**: Intelligent frame reconstruction from chunks
+- ✅ **Timeout Handling**: Automatic cleanup of incomplete frames
+- ✅ **Performance Metrics**: Detailed chunking and reassembly statistics
 
 ### Current System Status
 - **Camera Integration**: Fully functional with 1 camera device detected
+- **Hardware Encoding**: NVENC/Quick Sync detection and integration
 - **Web Interface**: Complete MVC implementation with all core pages
 - **API System**: Comprehensive REST API with all endpoints functional
-- **Video Streaming**: Real-time streaming working at 30 FPS via Canvas
-- **Frame Capture**: JPEG frame serving (75KB images) via `/api/cameras/frame`
-- **Camera Controls**: Full interface with start/stop/settings/snapshot/fullscreen
+- **Video Streaming**: Multi-mode streaming (WebSocket/WebRTC/HTTP) at 30-60 FPS
+- **Frame Capture**: Optimized JPEG frame serving with hardware acceleration
+- **Camera Controls**: Full interface with hardware encoding settings
 - **Documentation**: User-friendly help system and project information
 - **Error Handling**: Custom error pages and graceful error recovery
 - **Configuration**: Environment-based configuration management
@@ -664,6 +815,7 @@ handleBinaryFrame(arrayBuffer) {
 - **Encoding Methods**: Runtime switching between Binary (default), Base64, and Compressed modes
 - **Real-time Metrics**: Performance monitoring with encoding time and frame size tracking
 - **Advanced Threading**: Enhanced multi-threaded streaming with performance variables
+- **Hardware Support**: Full hardware acceleration integration and monitoring
 
 ### Known Operational Notes
 - OpenCV warnings during camera detection are normal and don't affect functionality
@@ -672,15 +824,17 @@ handleBinaryFrame(arrayBuffer) {
 - Web server runs on http://localhost:5000 with all routes accessible
 - Video streaming uses WebSocket binary transmission by default for optimal performance
 - Binary encoding provides 95% faster performance compared to base64 encoding
+- Hardware encoding automatically detected and utilized when available
 - Frame capture API consistently delivers optimized JPEG images
 - Real-time encoding method switching available without stream interruption
 - Performance metrics show encoding times and frame sizes in real-time
-- Adaptive quality control removed per user preference for manual control
+- WebRTC mode supports high-resolution streaming with frame chunking
+- OpenH264 libraries automatically loaded for cross-platform H.264 support
 
 ### Next Development Priorities
-1. **Further Performance Optimization**: Additional streaming performance enhancements
-2. **Advanced Controls**: Enhanced camera settings and quality controls
-3. **Recording Capabilities**: Video recording and playback features with optimized encoding
-4. **Multi-camera Support**: Simultaneous multi-camera streaming interface with binary transmission
-5. **Compression Enhancement**: Complete compressed encoding implementation with pako library
-6. **Performance Analytics**: Advanced performance monitoring and optimization recommendations
+1. **Recording Capabilities**: Video recording with hardware-accelerated encoding
+2. **Advanced Hardware Controls**: Hardware-specific encoding settings and optimization
+3. **Multi-camera Support**: Simultaneous multi-camera streaming with hardware acceleration
+4. **Compression Enhancement**: Complete compressed encoding implementation with pako library
+5. **Performance Analytics**: Advanced hardware performance monitoring and recommendations
+6. **Cross-Platform Testing**: Comprehensive testing across different hardware configurations
